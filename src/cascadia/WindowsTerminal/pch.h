@@ -70,7 +70,6 @@ Abstract:
 
 #include <winrt/TerminalApp.h>
 #include <winrt/Microsoft.Terminal.Settings.Model.h>
-#include <winrt/Microsoft.Terminal.Remoting.h>
 #include <winrt/Microsoft.Terminal.Control.h>
 #include <winrt/Microsoft.Terminal.UI.h>
 

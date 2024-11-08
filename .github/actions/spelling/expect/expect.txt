@@ -1505,7 +1505,6 @@ REGISTERVDM
 regkey
 REGSTR
 RELBINPATH
-remoting
 renamer
 rendersize
 reparented

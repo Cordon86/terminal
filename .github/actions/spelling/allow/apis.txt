@@ -97,11 +97,9 @@ IImage
 IInheritable
 IMap
 imm
-IMonarch
 IObject
 iosfwd
 IPackage
-IPeasant
 isa
 ISetup
 isspace

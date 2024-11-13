@@ -24,65 +24,46 @@ class WindowEmperor : public std::enable_shared_from_this<WindowEmperor>
 {
 public:
     WindowEmperor() noexcept;
-    void WaitForWindows();
 
     void HandleCommandlineArgs(int nCmdShow);
 
 private:
-    void _createNewWindowThread(const winrt::Microsoft::Terminal::Remoting::WindowRequestedArgs& args);
+    struct SummonWindowSelectionArgs
+    {
+        std::wstring_view WindowName;
+        bool OnCurrentDesktop = false;
+        winrt::TerminalApp::SummonWindowBehavior SummonBehavior;
+        uint64_t WindowID;
+    };
 
-    [[nodiscard]] static LRESULT __stdcall _wndProc(HWND const window, UINT const message, WPARAM const wparam, LPARAM const lparam) noexcept;
-    LRESULT _messageHandler(UINT const message, WPARAM const wParam, LPARAM const lParam) noexcept;
-    wil::unique_hwnd _window;
+    [[nodiscard]] static LRESULT __stdcall _wndProc(HWND window, UINT message, WPARAM wparam, LPARAM lparam) noexcept;
 
-    winrt::TerminalApp::App _app;
-    winrt::Windows::System::DispatcherQueue _dispatcher{ nullptr };
-    winrt::Microsoft::Terminal::Remoting::WindowManager _manager;
-
-    til::shared_mutex<std::vector<std::shared_ptr<WindowThread>>> _windows;
-    std::atomic<uint32_t> _windowThreadInstances;
-
-    til::shared_mutex<std::vector<std::shared_ptr<WindowThread>>> _oldThreads;
-
-    winrt::event_token _WindowCreatedToken;
-    winrt::event_token _WindowClosedToken;
-
-    std::vector<winrt::Microsoft::Terminal::Settings::Model::GlobalSummonArgs> _hotkeys;
-
-    std::unique_ptr<NotificationIcon> _notificationIcon;
-
-    bool _requiresPersistenceCleanupOnExit = false;
-    bool _quitting{ false };
-
-    void _windowStartedHandlerPostXAML(const std::shared_ptr<WindowThread>& sender);
+    void _createNewWindowThread(const winrt::TerminalApp::WindowRequestedArgs& args);
+    LRESULT _messageHandler(HWND window, UINT message, WPARAM wParam, LPARAM lParam) noexcept;
     void _removeWindow(uint64_t senderID);
     void _decrementWindowCount();
-
-    void _becomeMonarch();
     void _numberOfWindowsChanged(const winrt::Windows::Foundation::IInspectable&, const winrt::Windows::Foundation::IInspectable&);
-
     safe_void_coroutine _windowIsQuakeWindowChanged(winrt::Windows::Foundation::IInspectable sender, winrt::Windows::Foundation::IInspectable args);
-    safe_void_coroutine _windowRequestUpdateSettings();
-
     void _createMessageWindow();
-
-    void _hotkeyPressed(const long hotkeyIndex);
-    bool _registerHotKey(const int index, const winrt::Microsoft::Terminal::Control::KeyChord& hotkey) noexcept;
-    void _unregisterHotKey(const int index) noexcept;
+    void _hotkeyPressed(long hotkeyIndex);
+    bool _registerHotKey(int index, const winrt::Microsoft::Terminal::Control::KeyChord& hotkey) noexcept;
+    void _unregisterHotKey(int index) noexcept;
     safe_void_coroutine _setupGlobalHotkeys();
-
     safe_void_coroutine _close();
     void _finalizeSessionPersistence() const;
-
-    void _createNotificationIcon();
-    void _destroyNotificationIcon();
     void _checkWindowsForNotificationIcon();
-    void _showNotificationIconRequested();
-    void _hideNotificationIconRequested();
+    void _summonWindow();
 
-    struct Revokers
-    {
-        winrt::Microsoft::Terminal::Remoting::WindowManager::WindowCreated_revoker WindowCreated;
-        winrt::Microsoft::Terminal::Remoting::WindowManager::WindowClosed_revoker WindowClosed;
-    } _revokers{};
+    wil::unique_hwnd _window;
+    winrt::TerminalApp::App _app;
+    winrt::Windows::System::DispatcherQueue _dispatcher{ nullptr };
+    til::shared_mutex<std::vector<std::shared_ptr<WindowThread>>> _windows;
+    til::shared_mutex<std::vector<std::shared_ptr<WindowThread>>> _oldWindows;
+    std::atomic<uint32_t> _windowThreadInstances;
+    std::vector<winrt::Microsoft::Terminal::Settings::Model::GlobalSummonArgs> _hotkeys;
+    NOTIFYICONDATA _notificationIcon{};
+    bool _notificationIconShown = false;
+    bool _requiresPersistenceCleanupOnExit = false;
+    bool _currentSystemThemeIsDark = false;
+    bool _quitting{ false };
 };

@@ -88,6 +88,9 @@
     <ClInclude Include="MinMaxCloseControl.h">
       <DependentUpon>MinMaxCloseControl.xaml</DependentUpon>
     </ClInclude>
+    <ClInclude Include="Remoting.h">
+      <DependentUpon>Remoting.idl</DependentUpon>
+    </ClInclude>
     <ClInclude Include="PaletteItemTemplateSelector.h">
       <DependentUpon>PaletteItemTemplateSelector.idl</DependentUpon>
       <SubType>Code</SubType>
@@ -191,6 +194,9 @@
     <ClCompile Include="LanguageProfileNotifier.cpp" />
     <ClCompile Include="MinMaxCloseControl.cpp">
       <DependentUpon>MinMaxCloseControl.xaml</DependentUpon>
+    </ClCompile>
+    <ClCompile Include="Remoting.cpp">
+      <DependentUpon>Remoting.idl</DependentUpon>
     </ClCompile>
     <ClCompile Include="PaletteItemTemplateSelector.cpp">
       <DependentUpon>PaletteItemTemplateSelector.idl</DependentUpon>
@@ -309,6 +315,7 @@
     <Midl Include="App.idl">
       <DependentUpon>App.xaml</DependentUpon>
     </Midl>
+    <Midl Include="Remoting.idl" />
     <Midl Include="PaletteItemTemplateSelector.idl">
       <SubType>Designer</SubType>
     </Midl>
@@ -416,7 +423,6 @@
     <ProjectReference Include="$(OpenConsoleDir)src\cascadia\UIHelpers\UIHelpers.vcxproj">
       <Project>{6515F03F-E56D-4DB4-B23D-AC4FB80DB36F}</Project>
     </ProjectReference>
-
   </ItemGroup>
   <PropertyGroup>
     <!-- This is a hack to get the ARM64 CI build working. See

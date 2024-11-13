@@ -6,7 +6,6 @@
 #include "../types/inc/Viewport.hpp"
 #include "resource.h"
 #include "icon.h"
-#include "NotificationIcon.h"
 #include <dwmapi.h>
 #include <TerminalThemeHelpers.h>
 #include <CoreWindow.h>
@@ -201,8 +200,6 @@ void IslandWindow::_HandleCreateWindow(const WPARAM, const LPARAM lParam) noexce
     UpdateWindow(_window.get());
 
     UpdateWindowIconForActiveMetrics(_window.get());
-
-    _currentSystemThemeIsDark = Theme::IsSystemInDarkTheme();
 }
 
 // Method Description:
@@ -732,33 +729,6 @@ void IslandWindow::_OnGetMinMaxInfo(const WPARAM /*wParam*/, const LPARAM lParam
         if (search != _systemMenuItems.end())
         {
             search->second.callback();
-        }
-        break;
-    }
-    case WM_SETTINGCHANGE:
-    {
-        // Currently, we only support checking when the OS theme changes. In
-        // that case, wParam is 0. Re-evaluate when we decide to reload env vars
-        // (GH#1125)
-        if (wparam == 0 && lparam != 0)
-        {
-            const std::wstring param{ (wchar_t*)lparam };
-            // ImmersiveColorSet seems to be the notification that the OS theme
-            // changed. If that happens, let the app know, so it can hot-reload
-            // themes, color schemes that might depend on the OS theme
-            if (param == L"ImmersiveColorSet")
-            {
-                // GH#15732: Don't update the settings, unless the theme
-                // _actually_ changed. ImmersiveColorSet gets sent more often
-                // than just on a theme change. It notably gets sent when the PC
-                // is locked, or the UAC prompt opens.
-                auto isCurrentlyDark = Theme::IsSystemInDarkTheme();
-                if (isCurrentlyDark != _currentSystemThemeIsDark)
-                {
-                    _currentSystemThemeIsDark = isCurrentlyDark;
-                    UpdateSettingsRequested.raise();
-                }
-            }
         }
         break;
     }
@@ -1323,7 +1293,7 @@ void IslandWindow::_SetIsFullscreen(const bool fullscreenEnabled)
 // - toggleVisibility: controls how we should behave when already in the foreground.
 // Return Value:
 // - <none>
-safe_void_coroutine IslandWindow::SummonWindow(Remoting::SummonWindowBehavior args)
+safe_void_coroutine IslandWindow::SummonWindow(winrt::TerminalApp::SummonWindowBehavior args)
 {
     // On the foreground thread:
     co_await wil::resume_foreground(_rootGrid.Dispatcher());
@@ -1334,7 +1304,7 @@ safe_void_coroutine IslandWindow::SummonWindow(Remoting::SummonWindowBehavior ar
 // - As above.
 //   BODGY: ARM64 BUILD FAILED WITH fatal error C1001: Internal compiler error
 //   when this was part of the coroutine body.
-void IslandWindow::_summonWindowRoutineBody(Remoting::SummonWindowBehavior args)
+void IslandWindow::_summonWindowRoutineBody(winrt::TerminalApp::SummonWindowBehavior args)
 {
     auto actualDropdownDuration = args.DropdownDuration();
     // If the user requested an animation, let's check if animations are enabled in the OS.
@@ -1370,7 +1340,7 @@ void IslandWindow::_summonWindowRoutineBody(Remoting::SummonWindowBehavior args)
         // They want to toggle the window when it is the FG window, and we are
         // the FG window. However, if we're on a different monitor than the
         // mouse, then we should move to that monitor instead of dismissing.
-        if (args.ToMonitor() == Remoting::MonitorBehavior::ToMouse)
+        if (args.ToMonitor() == winrt::TerminalApp::MonitorBehavior::ToMouse)
         {
             const til::rect cursorMonitorRect{ _getMonitorForCursor().rcMonitor };
             const til::rect currentMonitorRect{ _getMonitorForWindow(GetHandle()).rcMonitor };
@@ -1447,7 +1417,7 @@ void IslandWindow::_doSlideAnimation(const uint32_t dropdownDuration, const bool
 }
 
 void IslandWindow::_dropdownWindow(const uint32_t dropdownDuration,
-                                   const Remoting::MonitorBehavior toMonitor)
+                                   const winrt::TerminalApp::MonitorBehavior toMonitor)
 {
     // First, get the window that's currently in the foreground. We'll need
     // _this_ window to be able to appear on top of. If we just use
@@ -1504,7 +1474,7 @@ void IslandWindow::_slideUpWindow(const uint32_t dropdownDuration)
 // Return Value:
 // - <none>
 void IslandWindow::_globalActivateWindow(const uint32_t dropdownDuration,
-                                         const Remoting::MonitorBehavior toMonitor)
+                                         const winrt::TerminalApp::MonitorBehavior toMonitor)
 {
     // First, get the window that's currently in the foreground. We'll need
     // _this_ window to be able to appear on top of. If we just use
@@ -1636,13 +1606,13 @@ MONITORINFO IslandWindow::_getMonitorForWindow(HWND foregroundWindow)
 // - toMonitor: Controls which monitor we should move to.
 // Return Value:
 // - <none>
-void IslandWindow::_moveToMonitor(HWND oldForegroundWindow, Remoting::MonitorBehavior toMonitor)
+void IslandWindow::_moveToMonitor(HWND oldForegroundWindow, winrt::TerminalApp::MonitorBehavior toMonitor)
 {
-    if (toMonitor == Remoting::MonitorBehavior::ToCurrent)
+    if (toMonitor == winrt::TerminalApp::MonitorBehavior::ToCurrent)
     {
         _moveToMonitorOf(oldForegroundWindow);
     }
-    else if (toMonitor == Remoting::MonitorBehavior::ToMouse)
+    else if (toMonitor == winrt::TerminalApp::MonitorBehavior::ToMouse)
     {
         _moveToMonitorOfMouse();
     }

@@ -5,19 +5,16 @@
 
 #include "pch.h"
 #include "NonClientIslandWindow.h"
-#include "NotificationIcon.h"
 #include <ThrottledFunc.h>
+
+class WindowEmperor;
 
 class AppHost : public std::enable_shared_from_this<AppHost>
 {
 public:
     static constexpr DWORD WM_REFRIGERATE = WM_APP + 0;
 
-    AppHost(const winrt::TerminalApp::AppLogic& logic,
-            winrt::Microsoft::Terminal::Remoting::WindowRequestedArgs args,
-            const winrt::Microsoft::Terminal::Remoting::WindowManager& manager,
-            const winrt::Microsoft::Terminal::Remoting::Peasant& peasant,
-            std::unique_ptr<IslandWindow> window = nullptr) noexcept;
+    AppHost(const winrt::TerminalApp::AppLogic& logic, winrt::TerminalApp::WindowRequestedArgs args, std::weak_ptr<WindowEmperor> manager, std::unique_ptr<IslandWindow> window = nullptr) noexcept;
 
     void AppTitleChanged(const winrt::Windows::Foundation::IInspectable& sender, winrt::hstring newTitle);
     void Initialize();
@@ -32,17 +29,11 @@ public:
 
     static void s_DisplayMessageBox(const winrt::TerminalApp::ParseCommandlineResult& message);
 
-    til::event<winrt::delegate<void()>> UpdateSettingsRequested;
-
 private:
     std::unique_ptr<IslandWindow> _window;
-
     winrt::TerminalApp::AppLogic _appLogic;
     winrt::TerminalApp::TerminalWindow _windowLogic;
-
-    winrt::Microsoft::Terminal::Remoting::WindowManager _windowManager{ nullptr };
-    winrt::Microsoft::Terminal::Remoting::Peasant _peasant{ nullptr };
-
+    std::weak_ptr<WindowEmperor> _windowManager;
     winrt::com_ptr<IVirtualDesktopManager> _desktopManager{ nullptr };
 
     enum WindowInitializedState : uint32_t
@@ -66,8 +57,8 @@ private:
     safe_void_coroutine _quit();
     void _revokeWindowCallbacks();
 
-    void _HandleCommandlineArgs(const winrt::Microsoft::Terminal::Remoting::WindowRequestedArgs& args);
-    void _HandleSessionRestore(const bool startedForContent);
+    void _HandleCommandlineArgs(const winrt::TerminalApp::WindowRequestedArgs& args);
+    void _HandleSessionRestore(const winrt::TerminalApp::WindowRequestedArgs& args);
 
     winrt::Microsoft::Terminal::Settings::Model::LaunchPosition _GetWindowLaunchPosition();
 
@@ -96,10 +87,10 @@ private:
     void _WindowMoved();
 
     void _DispatchCommandline(winrt::Windows::Foundation::IInspectable sender,
-                              winrt::Microsoft::Terminal::Remoting::CommandlineArgs args);
+                              winrt::TerminalApp::CommandlineArgs args);
 
     void _HandleSummon(const winrt::Windows::Foundation::IInspectable& sender,
-                       const winrt::Microsoft::Terminal::Remoting::SummonWindowBehavior& args);
+                       const winrt::TerminalApp::SummonWindowBehavior& args);
 
     safe_void_coroutine _IdentifyWindowsRequested(const winrt::Windows::Foundation::IInspectable sender,
                                                   const winrt::Windows::Foundation::IInspectable args);
@@ -149,9 +140,7 @@ private:
     void _handleMoveContent(const winrt::Windows::Foundation::IInspectable& sender,
                             winrt::TerminalApp::RequestMoveContentArgs args);
     void _handleAttach(const winrt::Windows::Foundation::IInspectable& sender,
-                       winrt::Microsoft::Terminal::Remoting::AttachRequest args);
-
-    void _requestUpdateSettings();
+                       winrt::TerminalApp::AttachRequest args);
 
     // Page -> us -> monarch
     void _handleReceiveContent(const winrt::Windows::Foundation::IInspectable& sender,
@@ -159,7 +148,7 @@ private:
 
     // monarch -> us -> Page
     void _handleSendContent(const winrt::Windows::Foundation::IInspectable& sender,
-                            winrt::Microsoft::Terminal::Remoting::RequestReceiveContentArgs args);
+                            winrt::TerminalApp::RequestReceiveContentArgs args);
 
     void _startFrameTimer();
     void _stopFrameTimer();
@@ -174,14 +163,6 @@ private:
     // the members as a part of their own dtors.
     struct Revokers
     {
-        // Event handlers to revoke in ~AppHost, before calling App.Close
-        winrt::Microsoft::Terminal::Remoting::Peasant::ExecuteCommandlineRequested_revoker peasantExecuteCommandlineRequested;
-        winrt::Microsoft::Terminal::Remoting::Peasant::SummonRequested_revoker peasantSummonRequested;
-        winrt::Microsoft::Terminal::Remoting::Peasant::DisplayWindowIdRequested_revoker peasantDisplayWindowIdRequested;
-        winrt::Microsoft::Terminal::Remoting::Peasant::QuitRequested_revoker peasantQuitRequested;
-
-        winrt::Microsoft::Terminal::Remoting::Peasant::AttachRequested_revoker AttachRequested;
-
         winrt::TerminalApp::TerminalWindow::Initialized_revoker Initialized;
         winrt::TerminalApp::TerminalWindow::CloseRequested_revoker CloseRequested;
         winrt::TerminalApp::TerminalWindow::RequestedThemeChanged_revoker RequestedThemeChanged;
@@ -207,8 +188,6 @@ private:
         winrt::TerminalApp::TerminalWindow::PropertyChanged_revoker PropertyChanged;
         winrt::TerminalApp::TerminalWindow::SettingsChanged_revoker SettingsChanged;
         winrt::TerminalApp::TerminalWindow::WindowSizeChanged_revoker WindowSizeChanged;
-
-        winrt::Microsoft::Terminal::Remoting::Peasant::SendContentRequested_revoker SendContentRequested;
     } _revokers{};
 
     // our IslandWindow is not a WinRT type. It can't make auto_revokers like
@@ -224,7 +203,6 @@ private:
         winrt::event_token WindowCloseButtonClicked;
         winrt::event_token DragRegionClicked;
         winrt::event_token WindowVisibilityChanged;
-        winrt::event_token UpdateSettingsRequested;
         winrt::event_token MaximizeChanged;
         winrt::event_token AutomaticShutdownRequested;
         // LOAD BEARING!!

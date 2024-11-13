@@ -152,7 +152,7 @@ namespace winrt::TerminalApp::implementation
 
         // Do this here, rather than at the top of main. This will prevent us from
         // including this variable in the vars we serialize in the
-        // Remoting::CommandlineArgs up in HandleCommandlineArgs.
+        // winrt::TerminalApp::CommandlineArgs up in HandleCommandlineArgs.
         _setupFolderPathEnvVar();
     }
 
@@ -532,12 +532,6 @@ namespace winrt::TerminalApp::implementation
     // - anything else: We should handle the commandline in the window with the given ID.
     TerminalApp::FindTargetWindowResult AppLogic::FindTargetWindow(array_view<const winrt::hstring> args)
     {
-        if (!_loadedInitialSettings)
-        {
-            // Load settings if we haven't already
-            ReloadSettings();
-        }
-
         return AppLogic::_doFindTargetWindow(args, _settings.GlobalSettings().WindowingBehavior());
     }
 
@@ -645,19 +639,10 @@ namespace winrt::TerminalApp::implementation
 
     bool AppLogic::IsolatedMode()
     {
-        if (!_loadedInitialSettings)
-        {
-            ReloadSettings();
-        }
         return _settings.GlobalSettings().IsolatedMode();
     }
     bool AppLogic::RequestsTrayIcon()
     {
-        if (!_loadedInitialSettings)
-        {
-            // Load settings if we haven't already
-            ReloadSettings();
-        }
         const auto& globals{ _settings.GlobalSettings() };
         return globals.AlwaysShowNotificationIcon() ||
                globals.MinimizeToNotificationArea();
@@ -665,21 +650,11 @@ namespace winrt::TerminalApp::implementation
 
     bool AppLogic::AllowHeadless()
     {
-        if (!_loadedInitialSettings)
-        {
-            // Load settings if we haven't already
-            ReloadSettings();
-        }
         return _settings.GlobalSettings().AllowHeadless();
     }
 
     TerminalApp::TerminalWindow AppLogic::CreateNewWindow()
     {
-        if (_settings == nullptr)
-        {
-            ReloadSettings();
-        }
-
         auto warnings{ winrt::multi_threaded_vector<SettingsLoadWarnings>() };
         for (auto&& warn : _warnings)
         {

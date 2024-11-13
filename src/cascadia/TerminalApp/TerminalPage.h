@@ -9,7 +9,6 @@
 #include "AppCommandlineArgs.h"
 #include "RenameWindowRequestedArgs.g.h"
 #include "RequestMoveContentArgs.g.h"
-#include "RequestReceiveContentArgs.g.h"
 #include "LaunchPositionRequest.g.h"
 #include "Toast.h"
 
@@ -66,19 +65,6 @@ namespace winrt::TerminalApp::implementation
         RequestMoveContentArgs(const winrt::hstring window, const winrt::hstring content, uint32_t tabIndex) :
             _Window{ window },
             _Content{ content },
-            _TabIndex{ tabIndex } {};
-    };
-
-    struct RequestReceiveContentArgs : RequestReceiveContentArgsT<RequestReceiveContentArgs>
-    {
-        WINRT_PROPERTY(uint64_t, SourceWindow);
-        WINRT_PROPERTY(uint64_t, TargetWindow);
-        WINRT_PROPERTY(uint32_t, TabIndex);
-
-    public:
-        RequestReceiveContentArgs(const uint64_t src, const uint64_t tgt, const uint32_t tabIndex) :
-            _SourceWindow{ src },
-            _TargetWindow{ tgt },
             _TabIndex{ tabIndex } {};
     };
 
@@ -590,5 +576,4 @@ namespace winrt::TerminalApp::implementation
 namespace winrt::TerminalApp::factory_implementation
 {
     BASIC_FACTORY(TerminalPage);
-    BASIC_FACTORY(RequestReceiveContentArgs);
 }

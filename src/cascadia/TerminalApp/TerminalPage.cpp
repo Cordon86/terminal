@@ -18,11 +18,11 @@
 #include "ScratchpadContent.h"
 #include "SnippetsPaneContent.h"
 #include "TabRowControl.h"
+#include "Remoting.h"
 
 #include "TerminalPage.g.cpp"
 #include "RenameWindowRequestedArgs.g.cpp"
 #include "RequestMoveContentArgs.g.cpp"
-#include "RequestReceiveContentArgs.g.cpp"
 #include "LaunchPositionRequest.g.cpp"
 
 using namespace winrt;

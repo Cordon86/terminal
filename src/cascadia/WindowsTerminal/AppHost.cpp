@@ -10,6 +10,7 @@
 #include "resource.h"
 #include "VirtualDesktopUtils.h"
 #include "icon.h"
+#include "WindowEmperor.h"
 
 #include <TerminalThemeHelpers.h>
 
@@ -32,22 +33,21 @@ static constexpr short KeyPressed{ gsl::narrow_cast<short>(0x8000) };
 
 constexpr const auto FrameUpdateInterval = std::chrono::milliseconds(16);
 
-AppHost::AppHost(const winrt::TerminalApp::AppLogic& logic,
-                 winrt::Microsoft::Terminal::Remoting::WindowRequestedArgs args,
-                 const Remoting::WindowManager& manager,
-                 const Remoting::Peasant& peasant,
-                 std::unique_ptr<IslandWindow> window) noexcept :
+AppHost::AppHost(const winrt::TerminalApp::AppLogic& logic, winrt::TerminalApp::WindowRequestedArgs args, std::weak_ptr<WindowEmperor> manager, std::unique_ptr<IslandWindow> window) noexcept :
     _appLogic{ logic },
     _windowLogic{ nullptr }, // don't make one, we're going to take a ref on app's
     _windowManager{ manager },
-    _peasant{ peasant },
     _desktopManager{ winrt::try_create_instance<IVirtualDesktopManager>(__uuidof(VirtualDesktopManager)) }
 {
     _started = std::chrono::high_resolution_clock::now();
 
     _HandleCommandlineArgs(args);
 
-    _HandleSessionRestore(!args.Content().empty());
+    // Don't attempt to session restore if we're just making a window for tear-out
+    if (args.Content().empty())
+    {
+        _HandleSessionRestore(args);
+    }
 
     // _HandleCommandlineArgs will create a _windowLogic
     _useNonClientArea = _windowLogic.GetShowTabsInTitlebar();
@@ -141,23 +141,21 @@ void AppHost::s_DisplayMessageBox(const winrt::TerminalApp::ParseCommandlineResu
 // - <none>
 // Return Value:
 // - <none>
-void AppHost::_HandleCommandlineArgs(const Remoting::WindowRequestedArgs& windowArgs)
+void AppHost::_HandleCommandlineArgs(const winrt::TerminalApp::WindowRequestedArgs& windowArgs)
 {
     // We did want to make a window, so let's instantiate it here.
     // We don't have XAML yet, but we do have other stuff.
     _windowLogic = _appLogic.CreateNewWindow();
 
-    if (_peasant)
     {
-        const auto& args{ _peasant.InitialArgs() };
         const bool startedForContent = !windowArgs.Content().empty();
         if (startedForContent)
         {
             _windowLogic.SetStartupContent(windowArgs.Content(), windowArgs.InitialBounds());
         }
-        else if (args)
+        else
         {
-            const auto result = _windowLogic.SetStartupCommandline(args.Commandline(), args.CurrentDirectory(), args.CurrentEnvironment());
+            const auto result = _windowLogic.SetStartupCommandline(windowArgs.Commandline(), windowArgs.CurrentDirectory(), windowArgs.CurrentEnvironment());
             const auto message = _windowLogic.ParseCommandlineMessage();
             if (!message.empty())
             {
@@ -185,39 +183,23 @@ void AppHost::_HandleCommandlineArgs(const Remoting::WindowRequestedArgs& window
             return;
         }
 
-        // After handling the initial args, hookup the callback for handling
-        // future commandline invocations. When our peasant is told to execute a
-        // commandline (in the future), it'll trigger this callback, that we'll
-        // use to send the actions to the app.
-        //
-        // MORE EVENT HANDLERS, same rules as the ones above.
-        _revokers.peasantExecuteCommandlineRequested = _peasant.ExecuteCommandlineRequested(winrt::auto_revoke, { this, &AppHost::_DispatchCommandline });
-        _revokers.peasantSummonRequested = _peasant.SummonRequested(winrt::auto_revoke, { this, &AppHost::_HandleSummon });
-        _revokers.peasantDisplayWindowIdRequested = _peasant.DisplayWindowIdRequested(winrt::auto_revoke, { this, &AppHost::_DisplayWindowId });
-        _revokers.peasantQuitRequested = _peasant.QuitRequested(winrt::auto_revoke, { this, &AppHost::_QuitRequested });
-
-        _windowLogic.WindowName(_peasant.WindowName());
-        _windowLogic.WindowId(_peasant.GetID());
-
-        _revokers.AttachRequested = _peasant.AttachRequested(winrt::auto_revoke, { this, &AppHost::_handleAttach });
+        _windowLogic.WindowName(windowArgs.WindowName());
+        _windowLogic.WindowId(windowArgs.Id());
     }
 }
 
-void AppHost::_HandleSessionRestore(const bool startedForContent)
+void AppHost::_HandleSessionRestore(const winrt::TerminalApp::WindowRequestedArgs& args)
 {
-    const auto& args{ _peasant.InitialArgs() };
-
     // This is logic that almost seems like it belongs on the WindowEmperor.
     // It probably does. However, it needs to muck with our own window so
     // much, that there was no reasonable way of moving this. Moving it also
     // seemed to reorder bits of init so much that everything broke. So
     // we'll leave it here.
-    const auto numPeasants = _windowManager.GetNumberOfPeasants();
-    // Don't attempt to session restore if we're just making a window for tear-out
-    if (startedForContent || numPeasants != 1 || !_appLogic.ShouldUsePersistedLayout())
+    /*const auto numPeasants = _windowManager.GetNumberOfPeasants();
+    if (numPeasants != 1 || !_appLogic.ShouldUsePersistedLayout())
     {
         return;
-    }
+    }*/
 
     const auto state = ApplicationState::SharedInstance();
     const auto layouts = state.PersistedWindowLayouts();
@@ -330,8 +312,6 @@ void AppHost::Initialize()
 
     _windowCallbacks.WindowVisibilityChanged = _window->WindowVisibilityChanged([this](bool showOrHide) { _windowLogic.WindowVisibilityChanged(showOrHide); });
 
-    _windowCallbacks.UpdateSettingsRequested = _window->UpdateSettingsRequested({ this, &AppHost::_requestUpdateSettings });
-
     _revokers.Initialized = _windowLogic.Initialized(winrt::auto_revoke, { this, &AppHost::_WindowInitializedHandler });
     _revokers.RequestedThemeChanged = _windowLogic.RequestedThemeChanged(winrt::auto_revoke, { this, &AppHost::_UpdateTheme });
     _revokers.FullscreenChanged = _windowLogic.FullscreenChanged(winrt::auto_revoke, { this, &AppHost::_FullscreenChanged });
@@ -368,8 +348,8 @@ void AppHost::Initialize()
             _windowLogic.PersistState();
         }
 
-        _windowManager.SignalClose(_peasant);
-        _windowManager.QuitAll();
+        //_windowManager.SignalClose();
+        //_windowManager.QuitAll();
 
         // Ensure to write the state.json before we get TerminateProcess()d by the OS (Thanks!).
         state.Flush();
@@ -403,7 +383,6 @@ void AppHost::Initialize()
     _revokers.ShowWindowChanged = _windowLogic.ShowWindowChanged(winrt::auto_revoke, { this, &AppHost::_ShowWindowChanged });
     _revokers.RequestMoveContent = _windowLogic.RequestMoveContent(winrt::auto_revoke, { this, &AppHost::_handleMoveContent });
     _revokers.RequestReceiveContent = _windowLogic.RequestReceiveContent(winrt::auto_revoke, { this, &AppHost::_handleReceiveContent });
-    _revokers.SendContentRequested = _peasant.SendContentRequested(winrt::auto_revoke, { this, &AppHost::_handleSendContent });
 
     // BODGY
     // On certain builds of Windows, when Terminal is set as the default
@@ -458,12 +437,10 @@ void AppHost::Close()
 
 safe_void_coroutine AppHost::_quit()
 {
-    const auto peasant = _peasant;
-
     co_await winrt::resume_background();
 
     ApplicationState::SharedInstance().PersistedWindowLayouts(nullptr);
-    _windowManager.QuitAll();
+    //_windowManager.QuitAll();
 }
 
 void AppHost::_revokeWindowCallbacks()
@@ -478,7 +455,6 @@ void AppHost::_revokeWindowCallbacks()
     _window->WindowCloseButtonClicked(_windowCallbacks.WindowCloseButtonClicked);
     _window->DragRegionClicked(_windowCallbacks.DragRegionClicked);
     _window->WindowVisibilityChanged(_windowCallbacks.WindowVisibilityChanged);
-    _window->UpdateSettingsRequested(_windowCallbacks.UpdateSettingsRequested);
     _window->MaximizeChanged(_windowCallbacks.MaximizeChanged);
     _window->AutomaticShutdownRequested(_windowCallbacks.AutomaticShutdownRequested);
 }
@@ -525,7 +501,6 @@ void AppHost::AppTitleChanged(const winrt::Windows::Foundation::IInspectable& /*
     {
         _window->UpdateTitle(newTitle);
     }
-    _windowManager.UpdateActiveTabTitle(newTitle, _peasant);
 }
 
 // The terminal page is responsible for persisting it's own state, but it does
@@ -923,12 +898,12 @@ void AppHost::_WindowMouseWheeled(const winrt::Windows::Foundation::Point coord,
 // Return Value:
 // - <none>
 void AppHost::_DispatchCommandline(winrt::Windows::Foundation::IInspectable sender,
-                                   Remoting::CommandlineArgs args)
+                                   winrt::TerminalApp::CommandlineArgs args)
 {
-    const Remoting::SummonWindowBehavior summonArgs{};
+    const winrt::TerminalApp::SummonWindowBehavior summonArgs{};
     summonArgs.MoveToCurrentDesktop(false);
     summonArgs.DropdownDuration(0);
-    summonArgs.ToMonitor(Remoting::MonitorBehavior::InPlace);
+    summonArgs.ToMonitor(winrt::TerminalApp::MonitorBehavior::InPlace);
     summonArgs.ToggleVisibility(false); // Do not toggle, just make visible.
     // Summon the window whenever we dispatch a commandline to it. This will
     // make it obvious when a new tab/pane is created in a window.
@@ -949,7 +924,6 @@ void AppHost::_WindowActivated(bool activated)
 safe_void_coroutine AppHost::_peasantNotifyActivateWindow()
 {
     const auto desktopManager = _desktopManager;
-    const auto peasant = _peasant;
     const auto hwnd = _window->GetHandle();
 
     auto weakThis{ weak_from_this() };
@@ -968,20 +942,10 @@ safe_void_coroutine AppHost::_peasantNotifyActivateWindow()
     {
         co_return;
     }
-
-    // TODO: projects/5 - in the future, we'll want to actually get the
-    // desktop GUID in IslandWindow, and bubble that up here, then down to
-    // the Peasant. For now, we're just leaving space for it.
-    peasant.ActivateWindow({
-        peasant.GetID(),
-        reinterpret_cast<uint64_t>(hwnd),
-        currentDesktopGuid,
-        winrt::clock().now(),
-    });
 }
 
 void AppHost::_HandleSummon(const winrt::Windows::Foundation::IInspectable& /*sender*/,
-                            const Remoting::SummonWindowBehavior& args)
+                            const winrt::TerminalApp::SummonWindowBehavior& args)
 {
     _window->SummonWindow(args);
 
@@ -1038,11 +1002,6 @@ safe_void_coroutine AppHost::_IdentifyWindowsRequested(const winrt::Windows::Fou
     {
         co_return;
     }
-
-    if (_peasant)
-    {
-        _peasant.RequestIdentifyWindows();
-    }
 }
 
 // Method Description:
@@ -1061,25 +1020,8 @@ void AppHost::_DisplayWindowId(const winrt::Windows::Foundation::IInspectable& /
 safe_void_coroutine AppHost::_RenameWindowRequested(const winrt::Windows::Foundation::IInspectable /*sender*/,
                                                     const winrt::TerminalApp::RenameWindowRequestedArgs args)
 {
-    // Switch to the BG thread - anything x-proc must happen on a BG thread
-    co_await winrt::resume_background();
-
-    if (_peasant)
-    {
-        Remoting::RenameRequestArgs requestArgs{ args.ProposedName() };
-
-        _peasant.RequestRename(requestArgs);
-
-        if (requestArgs.Succeeded())
-        {
-            co_await wil::resume_foreground(_windowLogic.GetRoot().Dispatcher());
-            _windowLogic.WindowName(args.ProposedName());
-        }
-        else
-        {
-            _windowLogic.RenameFailed();
-        }
-    }
+    // TODO
+    co_return;
 }
 
 static double _opacityFromBrush(const winrt::Windows::UI::Xaml::Media::Brush& brush)
@@ -1288,10 +1230,10 @@ void AppHost::_WindowSizeChanged(const winrt::Windows::Foundation::IInspectable&
 void AppHost::_SummonWindowRequested(const winrt::Windows::Foundation::IInspectable& sender,
                                      const winrt::Windows::Foundation::IInspectable&)
 {
-    const Remoting::SummonWindowBehavior summonArgs{};
+    const winrt::TerminalApp::SummonWindowBehavior summonArgs{};
     summonArgs.MoveToCurrentDesktop(false);
     summonArgs.DropdownDuration(0);
-    summonArgs.ToMonitor(Remoting::MonitorBehavior::InPlace);
+    summonArgs.ToMonitor(winrt::TerminalApp::MonitorBehavior::InPlace);
     summonArgs.ToggleVisibility(false); // Do not toggle, just make visible.
     _HandleSummon(sender, summonArgs);
 }
@@ -1372,16 +1314,13 @@ void AppHost::_WindowMoved()
 void AppHost::_CloseRequested(const winrt::Windows::Foundation::IInspectable& /*sender*/,
                               const winrt::Windows::Foundation::IInspectable& /*args*/)
 {
-    if (_windowManager.GetNumberOfPeasants() <= 1)
+    //if (_windowManager.GetNumberOfPeasants() <= 1)
     {
         _quit();
         return;
     }
 
-    // Remove ourself from the list of peasants so that we aren't included in
-    // any future requests. This will also mean we block until any existing
-    // event handler finishes.
-    _windowManager.SignalClose(_peasant);
+    //_windowManager.SignalClose(_peasant);
 
     if (Utils::IsWindows11())
     {
@@ -1431,14 +1370,9 @@ safe_void_coroutine AppHost::_WindowInitializedHandler(const winrt::Windows::Fou
         nCmdShow = SW_MAXIMIZE;
     }
 
+    // Delay ShowWindow() until after XAML's initial layout pass is complete.
     auto weakThis{ weak_from_this() };
-    // For inexplicable reasons, again, hop to the BG thread, then back to the
-    // UI thread. This is shockingly load bearing - without this, then
-    // sometimes, we'll _still_ show the HWND before the XAML island actually
-    // paints.
     co_await wil::resume_foreground(_windowLogic.GetRoot().Dispatcher(), winrt::Windows::UI::Core::CoreDispatcherPriority::Low);
-
-    // If we're gone on the other side of this co_await, well, that's fine. Just bail.
     const auto strongThis = weakThis.lock();
     if (!strongThis || _window == nullptr)
     {
@@ -1549,11 +1483,11 @@ void AppHost::_handleMoveContent(const winrt::Windows::Foundation::IInspectable&
         };
     }
 
-    _windowManager.RequestMoveContent(args.Window(), args.Content(), args.TabIndex(), windowBoundsReference);
+    // TODO
 }
 
 void AppHost::_handleAttach(const winrt::Windows::Foundation::IInspectable& /*sender*/,
-                            winrt::Microsoft::Terminal::Remoting::AttachRequest args)
+                            winrt::TerminalApp::AttachRequest args)
 {
     _windowLogic.AttachContent(args.Content(), args.TabIndex());
 }
@@ -1564,21 +1498,13 @@ void AppHost::_handleAttach(const winrt::Windows::Foundation::IInspectable& /*se
 void AppHost::_handleReceiveContent(const winrt::Windows::Foundation::IInspectable& /* sender */,
                                     winrt::TerminalApp::RequestReceiveContentArgs args)
 {
-    _windowManager.RequestSendContent(winrt::Microsoft::Terminal::Remoting::RequestReceiveContentArgs{ args.SourceWindow(), args.TargetWindow(), args.TabIndex() });
+    // TODO
 }
 
 // monarch -> Peasant -> us -> Page
 // The Monarch was told to tell us to send our dragged content to someone else.
 void AppHost::_handleSendContent(const winrt::Windows::Foundation::IInspectable& /* sender */,
-                                 winrt::Microsoft::Terminal::Remoting::RequestReceiveContentArgs args)
+                                 winrt::TerminalApp::RequestReceiveContentArgs args)
 {
     _windowLogic.SendContentToOther(winrt::TerminalApp::RequestReceiveContentArgs{ args.SourceWindow(), args.TargetWindow(), args.TabIndex() });
-}
-
-// Bubble the update settings request up to the emperor. We're being called on
-// the Window thread, but the Emperor needs to update the settings on the _main_
-// thread.
-void AppHost::_requestUpdateSettings()
-{
-    UpdateSettingsRequested.raise();
 }

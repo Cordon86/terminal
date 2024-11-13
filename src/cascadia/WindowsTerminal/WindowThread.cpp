@@ -4,15 +4,13 @@
 #include "pch.h"
 #include "WindowThread.h"
 
-using namespace winrt::Microsoft::Terminal::Remoting;
+using namespace winrt::TerminalApp;
 
 bool WindowThread::_loggedInteraction = false;
 
 WindowThread::WindowThread(winrt::TerminalApp::AppLogic logic,
-                           winrt::Microsoft::Terminal::Remoting::WindowRequestedArgs args,
-                           winrt::Microsoft::Terminal::Remoting::WindowManager manager,
-                           winrt::Microsoft::Terminal::Remoting::Peasant peasant) :
-    _peasant{ std::move(peasant) },
+                           winrt::TerminalApp::WindowRequestedArgs args,
+                           std::weak_ptr<WindowEmperor> manager) :
     _appLogic{ std::move(logic) },
     _args{ std::move(args) },
     _manager{ std::move(manager) }
@@ -28,12 +26,7 @@ void WindowThread::CreateHost()
     assert(_warmWindow == nullptr);
 
     // Start the AppHost HERE, on the actual thread we want XAML to run on
-    _host = std::make_shared<::AppHost>(_appLogic,
-                                        _args,
-                                        _manager,
-                                        _peasant);
-
-    _UpdateSettingsRequestedToken = _host->UpdateSettingsRequested([this]() { UpdateSettingsRequested.raise(); });
+    _host = std::make_shared<::AppHost>(_appLogic, _args, _manager);
 
     winrt::init_apartment(winrt::apartment_type::single_threaded);
 
@@ -63,7 +56,6 @@ void WindowThread::RundownForExit()
 {
     if (_host)
     {
-        _host->UpdateSettingsRequested(_UpdateSettingsRequestedToken);
         _host->Close();
     }
     if (_warmWindow)
@@ -113,7 +105,6 @@ bool WindowThread::KeepWarm()
         // state transitions. In this case, the window is actually being woken up.
         if (msg.message == AppHost::WM_REFRIGERATE)
         {
-            _UpdateSettingsRequestedToken = _host->UpdateSettingsRequested([this]() { UpdateSettingsRequested.raise(); });
             // Re-initialize the host here, on the window thread
             _host->Initialize();
             return true;
@@ -130,8 +121,6 @@ bool WindowThread::KeepWarm()
 //   that can be re-used.
 void WindowThread::Refrigerate()
 {
-    _host->UpdateSettingsRequested(_UpdateSettingsRequestedToken);
-
     // keep a reference to the HWND and DesktopWindowXamlSource alive.
     _warmWindow = _host->Refrigerate();
 
@@ -143,18 +132,12 @@ void WindowThread::Refrigerate()
 // Method Description:
 // - "Reheat" this thread for reuse. We'll build a new AppHost, and pass in the
 //   existing window to it. We'll then wake up the thread stuck in KeepWarm().
-void WindowThread::Microwave(WindowRequestedArgs args, Peasant peasant)
+void WindowThread::Microwave(WindowRequestedArgs args)
 {
     const auto hwnd = _warmWindow->GetInteropHandle();
 
-    _peasant = std::move(peasant);
     _args = std::move(args);
-
-    _host = std::make_shared<AppHost>(_appLogic,
-                                      _args,
-                                      _manager,
-                                      _peasant,
-                                      std::move(_warmWindow));
+    _host = std::make_shared<AppHost>(_appLogic, _args, _manager, std::move(_warmWindow));
 
     // raise the signal to unblock KeepWarm and start the window message loop again.
     PostMessageW(hwnd, AppHost::WM_REFRIGERATE, 0, 0);
@@ -250,5 +233,5 @@ int WindowThread::_messagePump()
 
 uint64_t WindowThread::PeasantID()
 {
-    return _peasant.GetID();
+    return 0;
 }

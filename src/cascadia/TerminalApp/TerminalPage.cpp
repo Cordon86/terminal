@@ -170,7 +170,6 @@ namespace winrt::TerminalApp::implementation
 
         const auto canDragDrop = CanDragDrop();
 
-        _tabRow.PointerMoved({ get_weak(), &TerminalPage::_RestorePointerCursorHandler });
         _tabView.CanReorderTabs(canDragDrop);
         _tabView.CanDragTabs(canDragDrop);
         _tabView.TabDragStarting({ get_weak(), &TerminalPage::_TabDragStarted });
@@ -274,18 +273,7 @@ namespace winrt::TerminalApp::implementation
         // initialized the first time they're opened, in whatever method opens
         // them.
 
-        // Setup mouse vanish attributes
-        SystemParametersInfoW(SPI_GETMOUSEVANISH, 0, &_shouldMouseVanish, false);
-
         _tabRow.ShowElevationShield(IsRunningElevated() && _settings.GlobalSettings().ShowAdminShield());
-
-        // Store cursor, so we can restore it, e.g., after mouse vanishing
-        // (we'll need to adapt this logic once we make cursor context aware)
-        try
-        {
-            _defaultPointerCursor = CoreWindow::GetForCurrentThread().PointerCursor();
-        }
-        CATCH_LOG();
     }
 
     Windows::UI::Xaml::Automation::Peers::AutomationPeer TerminalPage::OnCreateAutomationPeer()
@@ -1723,8 +1711,6 @@ namespace winrt::TerminalApp::implementation
 
         term.OpenHyperlink({ this, &TerminalPage::_OpenHyperlinkHandler });
 
-        term.HidePointerCursor({ get_weak(), &TerminalPage::_HidePointerCursorHandler });
-        term.RestorePointerCursor({ get_weak(), &TerminalPage::_RestorePointerCursorHandler });
         // Add an event handler for when the terminal or tab wants to set a
         // progress indicator on the taskbar
         term.SetTaskbarProgress({ get_weak(), &TerminalPage::_SetTaskbarProgressHandler });
@@ -4272,46 +4258,6 @@ namespace winrt::TerminalApp::implementation
         const auto serviceName{ _getTabletServiceName() };
         const auto text{ RS_fmt(L"KeyboardServiceWarningText", serviceName) };
         return winrt::hstring{ text };
-    }
-
-    // Method Description:
-    // - Hides cursor if required
-    // Return Value:
-    // - <none>
-    void TerminalPage::_HidePointerCursorHandler(const IInspectable& /*sender*/, const IInspectable& /*eventArgs*/)
-    {
-        if (_shouldMouseVanish && !_isMouseHidden)
-        {
-            if (auto window{ CoreWindow::GetForCurrentThread() })
-            {
-                try
-                {
-                    window.PointerCursor(nullptr);
-                    _isMouseHidden = true;
-                }
-                CATCH_LOG();
-            }
-        }
-    }
-
-    // Method Description:
-    // - Restores cursor if required
-    // Return Value:
-    // - <none>
-    void TerminalPage::_RestorePointerCursorHandler(const IInspectable& /*sender*/, const IInspectable& /*eventArgs*/)
-    {
-        if (_isMouseHidden)
-        {
-            if (auto window{ CoreWindow::GetForCurrentThread() })
-            {
-                try
-                {
-                    window.PointerCursor(_defaultPointerCursor);
-                    _isMouseHidden = false;
-                }
-                CATCH_LOG();
-            }
-        }
     }
 
     // Method Description:

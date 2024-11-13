@@ -51,7 +51,6 @@
     <ClInclude Include="NonClientIslandWindow.h" />
     <ClInclude Include="VirtualDesktopUtils.h" />
     <ClInclude Include="WindowEmperor.h" />
-    <ClInclude Include="WindowThread.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -63,7 +62,6 @@
     <ClCompile Include="NonClientIslandWindow.cpp" />
     <ClCompile Include="VirtualDesktopUtils.cpp" />
     <ClCompile Include="WindowEmperor.cpp" />
-    <ClCompile Include="WindowThread.cpp" />
     <ClCompile Include="icon.cpp" />
   </ItemGroup>
   <ItemGroup>

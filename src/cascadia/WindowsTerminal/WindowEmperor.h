@@ -16,9 +16,8 @@ Abstract:
 --*/
 
 #pragma once
-#include "pch.h"
 
-#include "WindowThread.h"
+class AppHost;
 
 class WindowEmperor : public std::enable_shared_from_this<WindowEmperor>
 {
@@ -40,13 +39,11 @@ private:
 
     void _createNewWindowThread(const winrt::TerminalApp::WindowRequestedArgs& args);
     LRESULT _messageHandler(HWND window, UINT message, WPARAM wParam, LPARAM lParam) noexcept;
-    void _removeWindow(uint64_t senderID);
-    void _decrementWindowCount();
     void _numberOfWindowsChanged(const winrt::Windows::Foundation::IInspectable&, const winrt::Windows::Foundation::IInspectable&);
     safe_void_coroutine _windowIsQuakeWindowChanged(winrt::Windows::Foundation::IInspectable sender, winrt::Windows::Foundation::IInspectable args);
     void _createMessageWindow();
     void _hotkeyPressed(long hotkeyIndex);
-    bool _registerHotKey(int index, const winrt::Microsoft::Terminal::Control::KeyChord& hotkey) noexcept;
+    void _registerHotKey(int index, const winrt::Microsoft::Terminal::Control::KeyChord& hotkey) noexcept;
     void _unregisterHotKey(int index) noexcept;
     safe_void_coroutine _setupGlobalHotkeys();
     safe_void_coroutine _close();
@@ -57,9 +54,7 @@ private:
     wil::unique_hwnd _window;
     winrt::TerminalApp::App _app;
     winrt::Windows::System::DispatcherQueue _dispatcher{ nullptr };
-    til::shared_mutex<std::vector<std::shared_ptr<WindowThread>>> _windows;
-    til::shared_mutex<std::vector<std::shared_ptr<WindowThread>>> _oldWindows;
-    std::atomic<uint32_t> _windowThreadInstances;
+    std::list<std::shared_ptr<::AppHost>> _windows;
     std::vector<winrt::Microsoft::Terminal::Settings::Model::GlobalSummonArgs> _hotkeys;
     NOTIFYICONDATA _notificationIcon{};
     bool _notificationIconShown = false;

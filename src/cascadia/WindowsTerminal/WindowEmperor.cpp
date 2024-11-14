@@ -41,7 +41,11 @@ using VirtualKeyModifiers = winrt::Windows::System::VirtualKeyModifiers;
 // _revokers.peasantSummonRequested = _peasant.SummonRequested(winrt::auto_revoke, { this, &AppHost::_HandleSummon });
 // _revokers.peasantDisplayWindowIdRequested = _peasant.DisplayWindowIdRequested(winrt::auto_revoke, { this, &AppHost::_DisplayWindowId });
 
-static constexpr ULONG_PTR TERMINAL_HANDOFF_MAGIC = 0x5445524d494e414c; // 'TERMINAL'
+#ifdef _WIN64
+static constexpr ULONG_PTR TERMINAL_HANDOFF_MAGIC = 0x4c414e494d524554; // 'TERMINAL'
+#else
+static constexpr ULONG_PTR TERMINAL_HANDOFF_MAGIC = 0x4d524554; // 'TERM'
+#endif
 
 extern "C" IMAGE_DOS_HEADER __ImageBase;
 
@@ -208,7 +212,8 @@ void WindowEmperor::HandleCommandlineArgs(int nCmdShow)
         mutex = acquireMutexOrAttemptHandoff(nCmdShow);
         if (!mutex)
         {
-            return;
+            TerminateProcess(GetCurrentProcess(), gsl::narrow_cast<UINT>(0));
+            __assume(false);
         }
     }
 
@@ -553,16 +558,7 @@ LRESULT WindowEmperor::_messageHandler(HWND window, UINT const message, WPARAM c
                         for (const auto& host : _windows)
                         {
                             const auto logic = host->Logic();
-                            if (!logic)
-                            {
-                                continue;
-                            }
-
                             const auto props = logic.WindowProperties();
-                            if (!props)
-                            {
-                                continue;
-                            }
 
                             std::wstring displayText;
                             displayText.reserve(64);

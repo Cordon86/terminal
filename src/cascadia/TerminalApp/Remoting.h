@@ -6,7 +6,6 @@
 #include "AttachRequest.g.h"
 #include "CommandlineArgs.g.h"
 #include "FindTargetWindowArgs.g.h"
-#include "RenameRequestArgs.g.h"
 #include "RequestReceiveContentArgs.g.h"
 #include "SummonWindowBehavior.g.h"
 #include "WindowActivatedArgs.g.h"
@@ -48,16 +47,6 @@ namespace winrt::TerminalApp::implementation
             _SourceWindow{ src },
             _TargetWindow{ tgt },
             _TabIndex{ tabIndex } {};
-    };
-
-    struct RenameRequestArgs : public RenameRequestArgsT<RenameRequestArgs>
-    {
-        WINRT_PROPERTY(winrt::hstring, NewName);
-        WINRT_PROPERTY(bool, Succeeded, false);
-
-    public:
-        RenameRequestArgs(winrt::hstring newName) :
-            _NewName{ newName } {};
     };
 
     struct CommandlineArgs : public CommandlineArgsT<CommandlineArgs>
@@ -185,7 +174,6 @@ namespace winrt::TerminalApp::factory_implementation
     BASIC_FACTORY(SummonWindowBehavior);
     BASIC_FACTORY(WindowActivatedArgs);
     BASIC_FACTORY(CommandlineArgs);
-    BASIC_FACTORY(RenameRequestArgs);
     BASIC_FACTORY(RequestReceiveContentArgs);
     BASIC_FACTORY(WindowRequestedArgs);
 }

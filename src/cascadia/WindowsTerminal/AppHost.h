@@ -54,7 +54,6 @@ private:
 
     uint32_t _launchShowWindowCommand{ SW_NORMAL };
 
-    safe_void_coroutine _quit();
     void _revokeWindowCallbacks();
 
     void _HandleCommandlineArgs(const winrt::TerminalApp::WindowRequestedArgs& args);
@@ -92,12 +91,10 @@ private:
     void _HandleSummon(const winrt::Windows::Foundation::IInspectable& sender,
                        const winrt::TerminalApp::SummonWindowBehavior& args);
 
-    safe_void_coroutine _IdentifyWindowsRequested(const winrt::Windows::Foundation::IInspectable sender,
-                                                  const winrt::Windows::Foundation::IInspectable args);
+    void _IdentifyWindowsRequested(const winrt::Windows::Foundation::IInspectable sender,
+                                   const winrt::Windows::Foundation::IInspectable args);
     void _DisplayWindowId(const winrt::Windows::Foundation::IInspectable& sender,
                           const winrt::Windows::Foundation::IInspectable& args);
-    safe_void_coroutine _RenameWindowRequested(const winrt::Windows::Foundation::IInspectable sender,
-                                               const winrt::TerminalApp::RenameWindowRequestedArgs args);
 
     void _HandleSettingsChanged(const winrt::Windows::Foundation::IInspectable& sender,
                                 const winrt::TerminalApp::SettingsLoadEventArgs& args);
@@ -173,7 +170,6 @@ private:
         winrt::TerminalApp::TerminalWindow::CloseWindowRequested_revoker CloseWindowRequested;
         winrt::TerminalApp::TerminalWindow::SetTaskbarProgress_revoker SetTaskbarProgress;
         winrt::TerminalApp::TerminalWindow::IdentifyWindowsRequested_revoker IdentifyWindowsRequested;
-        winrt::TerminalApp::TerminalWindow::RenameWindowRequested_revoker RenameWindowRequested;
         winrt::TerminalApp::TerminalWindow::IsQuakeWindowChanged_revoker IsQuakeWindowChanged;
         winrt::TerminalApp::TerminalWindow::SummonWindowRequested_revoker SummonWindowRequested;
         winrt::TerminalApp::TerminalWindow::OpenSystemMenu_revoker OpenSystemMenu;

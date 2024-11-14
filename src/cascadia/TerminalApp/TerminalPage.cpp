@@ -4317,42 +4317,6 @@ namespace winrt::TerminalApp::implementation
         }
     }
 
-    // Method Description:
-    // - Called when an attempt to rename the window has failed. This will open
-    //   the toast displaying a message to the user that the attempt to rename
-    //   the window has failed.
-    // - This will load the RenameFailedToast TeachingTip the first time it's called.
-    // Arguments:
-    // - <none>
-    // Return Value:
-    // - <none>
-    safe_void_coroutine TerminalPage::RenameFailed()
-    {
-        auto weakThis{ get_weak() };
-        co_await wil::resume_foreground(Dispatcher());
-        if (auto page{ weakThis.get() })
-        {
-            // If we haven't ever loaded the TeachingTip, then do so now and
-            // create the toast for it.
-            if (page->_windowRenameFailedToast == nullptr)
-            {
-                if (auto tip{ page->FindName(L"RenameFailedToast").try_as<MUX::Controls::TeachingTip>() })
-                {
-                    page->_windowRenameFailedToast = std::make_shared<Toast>(tip);
-                    // Make sure to use the weak ref when setting up this
-                    // callback.
-                    tip.Closed({ page->get_weak(), &TerminalPage::_FocusActiveControl });
-                }
-            }
-            _UpdateTeachingTipTheme(RenameFailedToast().try_as<winrt::Windows::UI::Xaml::FrameworkElement>());
-
-            if (page->_windowRenameFailedToast != nullptr)
-            {
-                page->_windowRenameFailedToast->Open();
-            }
-        }
-    }
-
     safe_void_coroutine TerminalPage::ShowTerminalWorkingDirectory()
     {
         auto weakThis{ get_weak() };
@@ -4384,8 +4348,7 @@ namespace winrt::TerminalApp::implementation
     // - Called when the user hits the "Ok" button on the WindowRenamer TeachingTip.
     // - Will raise an event that will bubble up to the monarch, asking if this
     //   name is acceptable.
-    //   - If it is, we'll eventually get called back in TerminalPage::WindowName(hstring).
-    //   - If not, then TerminalPage::RenameFailed will get called.
+    //   - we'll eventually get called back in TerminalPage::WindowName(hstring).
     // Arguments:
     // - <unused>
     // Return Value:

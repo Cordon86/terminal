@@ -7,7 +7,6 @@
 #include "AttachRequest.g.cpp"
 #include "CommandlineArgs.g.cpp"
 #include "FindTargetWindowArgs.g.cpp"
-#include "RenameRequestArgs.g.cpp"
 #include "RequestReceiveContentArgs.g.cpp"
 #include "SummonWindowBehavior.g.cpp"
 #include "WindowActivatedArgs.g.cpp"

@@ -219,6 +219,7 @@ namespace winrt::TerminalApp::implementation
         _root->Loaded({ get_weak(), &TerminalWindow::_OnLoaded });
         _root->Initialized({ get_weak(), &TerminalWindow::_pageInitialized });
         _root->WindowSizeChanged({ get_weak(), &TerminalWindow::_WindowSizeChanged });
+        _root->RenameWindowRequested({ get_weak(), &TerminalWindow::_RenameWindowRequested });
         _root->Create();
 
         AppLogic::Current()->SettingsChanged({ get_weak(), &TerminalWindow::UpdateSettingsHandler });
@@ -1205,14 +1206,6 @@ namespace winrt::TerminalApp::implementation
         }
     }
 
-    void TerminalWindow::RenameFailed()
-    {
-        if (_root)
-        {
-            _root->RenameFailed();
-        }
-    }
-
     void TerminalWindow::WindowName(const winrt::hstring& name)
     {
         const auto oldIsQuakeMode = _WindowProperties->IsQuakeWindow();
@@ -1366,6 +1359,11 @@ namespace winrt::TerminalApp::implementation
         args.Height(static_cast<int32_t>(pixelSize.Height));
 
         WindowSizeChanged.raise(*this, args);
+    }
+
+    void TerminalWindow::_RenameWindowRequested(const IInspectable&, const winrt::TerminalApp::RenameWindowRequestedArgs args)
+    {
+        WindowName(args.ProposedName());
     }
 
     winrt::hstring WindowProperties::WindowName() const noexcept

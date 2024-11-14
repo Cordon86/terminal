@@ -152,7 +152,7 @@ namespace winrt::TerminalApp::implementation
 
         // Do this here, rather than at the top of main. This will prevent us from
         // including this variable in the vars we serialize in the
-        // winrt::TerminalApp::CommandlineArgs up in HandleCommandlineArgs.
+        // Remoting::CommandlineArgs up in HandleCommandlineArgs.
         _setupFolderPathEnvVar();
     }
 

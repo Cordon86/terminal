@@ -14,13 +14,6 @@ namespace TerminalApp
         String CurrentEnvironment { get; };
     };
 
-    runtimeclass RenameRequestArgs
-    {
-        RenameRequestArgs(String newName);
-        String NewName { get; };
-        Boolean Succeeded;
-    };
-
     runtimeclass WindowActivatedArgs
     {
         WindowActivatedArgs(UInt64 peasantID, Guid desktopID, Windows.Foundation.DateTime activatedTime);

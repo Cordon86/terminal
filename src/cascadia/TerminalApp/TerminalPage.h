@@ -142,7 +142,6 @@ namespace winrt::TerminalApp::implementation
         safe_void_coroutine IdentifyWindow();
         void ActionSaved(winrt::hstring input, winrt::hstring name, winrt::hstring keyChord);
         void ActionSaveFailed(winrt::hstring message);
-        safe_void_coroutine RenameFailed();
         safe_void_coroutine ShowTerminalWorkingDirectory();
 
         safe_void_coroutine ProcessStartupActions(Windows::Foundation::Collections::IVector<Microsoft::Terminal::Settings::Model::ActionAndArgs> actions,
@@ -261,7 +260,6 @@ namespace winrt::TerminalApp::implementation
         std::shared_ptr<Toast> _windowIdToast{ nullptr };
         std::shared_ptr<Toast> _actionSavedToast{ nullptr };
         std::shared_ptr<Toast> _actionSaveFailedToast{ nullptr };
-        std::shared_ptr<Toast> _windowRenameFailedToast{ nullptr };
         std::shared_ptr<Toast> _windowCwdToast{ nullptr };
 
         winrt::Windows::UI::Xaml::Controls::TextBox::LayoutUpdated_revoker _renamerLayoutUpdatedRevoker;

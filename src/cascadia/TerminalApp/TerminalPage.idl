@@ -64,7 +64,6 @@ namespace TerminalApp
 
         WindowProperties WindowProperties { get; };
         void IdentifyWindow();
-        void RenameFailed();
 
         String SavedActionName { get; };
         String SavedActionKeyChord { get; };

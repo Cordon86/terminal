@@ -348,9 +348,11 @@ void WindowEmperor::HandleCommandlineArgs(int nCmdShow)
 
 void WindowEmperor::_createNewWindowThread(const winrt::TerminalApp::WindowRequestedArgs& args)
 {
-    auto host = std::make_shared<AppHost>(_app.Logic(), args, weak_from_this());
-    host->Initialize();
-    _windows.emplace_back(std::move(host));
+    _dispatcher.TryEnqueue([this, args]() {
+        auto host = std::make_shared<AppHost>(_app.Logic(), args, weak_from_this());
+        host->Initialize();
+        _windows.emplace_back(std::move(host));
+    });
 }
 
 // sender and args are always nullptr

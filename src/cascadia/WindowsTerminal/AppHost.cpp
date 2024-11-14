@@ -195,6 +195,7 @@ void AppHost::_HandleSessionRestore(const winrt::TerminalApp::WindowRequestedArg
     // much, that there was no reasonable way of moving this. Moving it also
     // seemed to reorder bits of init so much that everything broke. So
     // we'll leave it here.
+    // TODO: What the fuck is even going on here
     /*const auto numPeasants = _windowManager.GetNumberOfPeasants();
     if (numPeasants != 1 || !_appLogic.ShouldUsePersistedLayout())
     {
@@ -348,11 +349,14 @@ void AppHost::Initialize()
             _windowLogic.PersistState();
         }
 
+        // TODO:
         //_windowManager.SignalClose();
         //_windowManager.QuitAll();
 
         // Ensure to write the state.json before we get TerminateProcess()d by the OS (Thanks!).
         state.Flush();
+
+        PostQuitMessage(0);
     });
 
     // Load bearing: make sure the PropertyChanged handler is added before we
@@ -367,7 +371,6 @@ void AppHost::Initialize()
     _revokers.CloseWindowRequested = _windowLogic.CloseWindowRequested(winrt::auto_revoke, { this, &AppHost::_CloseRequested });
     _revokers.SetTaskbarProgress = _windowLogic.SetTaskbarProgress(winrt::auto_revoke, { this, &AppHost::SetTaskbarProgress });
     _revokers.IdentifyWindowsRequested = _windowLogic.IdentifyWindowsRequested(winrt::auto_revoke, { this, &AppHost::_IdentifyWindowsRequested });
-    _revokers.RenameWindowRequested = _windowLogic.RenameWindowRequested(winrt::auto_revoke, { this, &AppHost::_RenameWindowRequested });
     _revokers.WindowSizeChanged = _windowLogic.WindowSizeChanged(winrt::auto_revoke, { this, &AppHost::_WindowSizeChanged });
 
     // A note: make sure to listen to our _window_'s settings changed, not the
@@ -440,12 +443,6 @@ void AppHost::Close()
 IslandWindow* AppHost::GetWindow() const noexcept
 {
     return _window.get();
-}
-
-safe_void_coroutine AppHost::_quit()
-{
-    PostQuitMessage(0);
-    co_return;
 }
 
 void AppHost::_revokeWindowCallbacks()
@@ -965,20 +962,12 @@ void AppHost::_HandleSummon(const winrt::Windows::Foundation::IInspectable& /*se
 // - <unused>
 // Return Value:
 // - <none>
-safe_void_coroutine AppHost::_IdentifyWindowsRequested(const winrt::Windows::Foundation::IInspectable /*sender*/,
-                                                       const winrt::Windows::Foundation::IInspectable /*args*/)
+void AppHost::_IdentifyWindowsRequested(const winrt::Windows::Foundation::IInspectable /*sender*/,
+                                        const winrt::Windows::Foundation::IInspectable /*args*/)
 {
-    auto weakThis{ weak_from_this() };
-
-    // We'll be raising an event that may result in a RPC call to the monarch -
-    // make sure we're on the background thread, or this will silently fail
-    co_await winrt::resume_background();
-
-    // If we're gone on the other side of this co_await, well, that's fine. Just bail.
-    const auto strongThis = weakThis.lock();
-    if (!strongThis)
+    if (const auto manager = _windowManager.lock())
     {
-        co_return;
+        PostMessageW(manager->GetMainWindow(), WindowEmperor::WM_IDENTIFY_ALL_WINDOWS, 0, 0);
     }
 }
 
@@ -993,13 +982,6 @@ void AppHost::_DisplayWindowId(const winrt::Windows::Foundation::IInspectable& /
                                const winrt::Windows::Foundation::IInspectable& /*args*/)
 {
     _windowLogic.IdentifyWindow();
-}
-
-safe_void_coroutine AppHost::_RenameWindowRequested(const winrt::Windows::Foundation::IInspectable /*sender*/,
-                                                    const winrt::TerminalApp::RenameWindowRequestedArgs args)
-{
-    // TODO
-    co_return;
 }
 
 static double _opacityFromBrush(const winrt::Windows::UI::Xaml::Media::Brush& brush)
@@ -1145,7 +1127,7 @@ void AppHost::_IsQuakeWindowChanged(const winrt::Windows::Foundation::IInspectab
 void AppHost::_RequestQuitAll(const winrt::Windows::Foundation::IInspectable&,
                               const winrt::Windows::Foundation::IInspectable&)
 {
-    _quit();
+    PostQuitMessage(0);
 }
 
 void AppHost::_ShowWindowChanged(const winrt::Windows::Foundation::IInspectable&,

@@ -5121,19 +5121,12 @@ namespace winrt::TerminalApp::implementation
             // Stash the offset from where we started the drag to the
             // tab's origin. We'll use that offset in the future to help
             // position the dropped window.
-
-            // First, the position of the pointer, from the CoreWindow
-            const auto pointerPosition = CoreWindow::GetForCurrentThread().PointerPosition();
-            // Next, the position of the tab itself:
-            const auto tabPosition = eventTab.TransformToVisual(nullptr).TransformPoint({ 0, 0 });
-            // Now, we need to add the origin of our CoreWindow to the tab
-            // position.
-            const auto windowOrigin = CoreWindow::GetForCurrentThread().Bounds();
-            // Subtract the two to get the offset.
-            _stashed.dragOffset = {
-                pointerPosition.X - windowOrigin.X - tabPosition.X,
-                pointerPosition.Y - windowOrigin.Y - tabPosition.Y,
-            };
+            const auto inverseScale = 1.0f / static_cast<float>(eventTab.XamlRoot().RasterizationScale());
+            POINT cursorPos;
+            GetCursorPos(&cursorPos);
+            ScreenToClient(*_hostingHwnd, &cursorPos);
+            _stashed.dragOffset.X = cursorPos.x * inverseScale;
+            _stashed.dragOffset.Y = cursorPos.y * inverseScale;
 
             // Into the DataPackage, let's stash our own window ID.
             const auto id{ _WindowProperties.WindowId() };

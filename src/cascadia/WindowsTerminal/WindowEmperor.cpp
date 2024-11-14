@@ -6,12 +6,11 @@
 
 #include <icon.h>
 
-#include "LibraryResources.h"
-#include "../inc/WindowingBehavior.h"
-#include "../../types/inc/utils.hpp"
 #include "AppHost.h"
+#include "LibraryResources.h"
 #include "resource.h"
 #include "ScopedResourceLoader.h"
+#include "../../types/inc/utils.hpp"
 
 enum class NotificationIconMenuItemAction
 {
@@ -41,7 +40,6 @@ using VirtualKeyModifiers = winrt::Windows::System::VirtualKeyModifiers;
 // _revokers.peasantExecuteCommandlineRequested = _peasant.ExecuteCommandlineRequested(winrt::auto_revoke, { this, &AppHost::_DispatchCommandline });
 // _revokers.peasantSummonRequested = _peasant.SummonRequested(winrt::auto_revoke, { this, &AppHost::_HandleSummon });
 // _revokers.peasantDisplayWindowIdRequested = _peasant.DisplayWindowIdRequested(winrt::auto_revoke, { this, &AppHost::_DisplayWindowId });
-// _revokers.peasantQuitRequested = _peasant.QuitRequested(winrt::auto_revoke, { this, &AppHost::_QuitRequested });
 
 static constexpr ULONG_PTR TERMINAL_HANDOFF_MAGIC = 0x5445524d494e414c; // 'TERMINAL'
 
@@ -192,6 +190,11 @@ WindowEmperor::WindowEmperor() noexcept
     _dispatcher = winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
 }
 
+HWND WindowEmperor::GetMainWindow() const noexcept
+{
+    return _window.get();
+}
+
 void WindowEmperor::HandleCommandlineArgs(int nCmdShow)
 {
     _app.Logic().ReloadSettings();
@@ -274,10 +277,10 @@ void WindowEmperor::HandleCommandlineArgs(int nCmdShow)
     }
 
     bool _loggedInteraction = false;
-    MSG message{};
-    while (GetMessageW(&message, nullptr, 0, 0))
+    MSG msg{};
+    while (GetMessageW(&msg, nullptr, 0, 0))
     {
-        if (!_loggedInteraction && (message.message == WM_KEYDOWN || message.message == WM_SYSKEYDOWN))
+        if (!_loggedInteraction && (msg.message == WM_KEYDOWN || msg.message == WM_SYSKEYDOWN))
         {
             TraceLoggingWrite(
                 g_hWindowsTerminalProvider,
@@ -295,9 +298,9 @@ void WindowEmperor::HandleCommandlineArgs(int nCmdShow)
         // implementing a custom IF7Listener interface.
         // If the recipient of IF7Listener::OnF7Pressed suggests that the F7 press has, in fact,
         // been handled we can discard the message before we even translate it.
-        if ((message.message == WM_KEYDOWN || message.message == WM_SYSKEYDOWN) && message.wParam == VK_F7)
+        if ((msg.message == WM_KEYDOWN || msg.message == WM_SYSKEYDOWN) && msg.wParam == VK_F7)
         {
-            if (!_windows.empty() && _windows.front()->OnDirectKeyEvent(VK_F7, LOBYTE(HIWORD(message.lParam)), true))
+            if (!_windows.empty() && _windows.front()->OnDirectKeyEvent(VK_F7, LOBYTE(HIWORD(msg.lParam)), true))
             {
                 // The application consumed the F7. Don't let Xaml get it.
                 continue;
@@ -307,10 +310,10 @@ void WindowEmperor::HandleCommandlineArgs(int nCmdShow)
         // GH#6421 - System XAML will never send an Alt KeyUp event. So, similar
         // to how we'll steal the F7 KeyDown above, we'll steal the Alt KeyUp
         // here, and plumb it through.
-        if ((message.message == WM_KEYUP || message.message == WM_SYSKEYUP) && message.wParam == VK_MENU)
+        if ((msg.message == WM_KEYUP || msg.message == WM_SYSKEYUP) && msg.wParam == VK_MENU)
         {
             // Let's pass <Alt> to the application
-            if (!_windows.empty() && _windows.front()->OnDirectKeyEvent(VK_MENU, LOBYTE(HIWORD(message.lParam)), false))
+            if (!_windows.empty() && _windows.front()->OnDirectKeyEvent(VK_MENU, LOBYTE(HIWORD(msg.lParam)), false))
             {
                 // The application consumed the Alt. Don't let Xaml get it.
                 continue;
@@ -320,17 +323,17 @@ void WindowEmperor::HandleCommandlineArgs(int nCmdShow)
         // GH#7125 = System XAML will show a system dialog on Alt Space. We want to
         // explicitly prevent that because we handle that ourselves. So similar to
         // above, we steal the event and hand it off to the host.
-        if (message.message == WM_SYSKEYDOWN && message.wParam == VK_SPACE)
+        if (msg.message == WM_SYSKEYDOWN && msg.wParam == VK_SPACE)
         {
             if (!_windows.empty())
             {
-                _windows.front()->OnDirectKeyEvent(VK_SPACE, LOBYTE(HIWORD(message.lParam)), true);
+                _windows.front()->OnDirectKeyEvent(VK_SPACE, LOBYTE(HIWORD(msg.lParam)), true);
                 continue;
             }
         }
 
-        TranslateMessage(&message);
-        DispatchMessageW(&message);
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
     }
 
     _finalizeSessionPersistence();
@@ -417,7 +420,7 @@ void WindowEmperor::_createMessageWindow()
     _notificationIcon.hWnd = _window.get();
     _notificationIcon.uID = 1;
     _notificationIcon.uFlags = NIF_MESSAGE | NIF_TIP | NIF_SHOWTIP | NIF_ICON;
-    _notificationIcon.uCallbackMessage = CM_NOTIFY_FROM_NOTIFICATION_AREA;
+    _notificationIcon.uCallbackMessage = WM_NOTIFY_FROM_NOTIFICATION_AREA;
     _notificationIcon.hIcon = static_cast<HICON>(GetActiveAppIconHandle(true));
     _notificationIcon.uVersion = NOTIFYICON_VERSION_4;
 
@@ -491,7 +494,29 @@ LRESULT WindowEmperor::_messageHandler(HWND window, UINT const message, WPARAM c
             _hotkeyPressed(static_cast<long>(wParam));
             return 0;
         }
-        case CM_NOTIFY_FROM_NOTIFICATION_AREA:
+        case WM_CLOSE_TERMINAL_WINDOW:
+        {
+            const auto host = reinterpret_cast<AppHost*>(lParam);
+            auto it = _windows.begin();
+            const auto end = _windows.end();
+
+            for (; it != end; ++it)
+            {
+                if (host == it->get())
+                {
+                    host->Close();
+                    _windows.erase(it);
+                    break;
+                }
+            }
+
+            if (_windows.empty())
+            {
+                PostQuitMessage(0);
+            }
+            return 0;
+        }
+        case WM_NOTIFY_FROM_NOTIFICATION_AREA:
         {
             switch (LOWORD(lParam))
             {

@@ -433,14 +433,19 @@ void AppHost::Close()
         _windowLogic.DismissDialog();
         _windowLogic = nullptr;
     }
+
+    DestroyWindow(_window->GetHandle());
+}
+
+IslandWindow* AppHost::GetWindow() const noexcept
+{
+    return _window.get();
 }
 
 safe_void_coroutine AppHost::_quit()
 {
-    co_await winrt::resume_background();
-
-    ApplicationState::SharedInstance().PersistedWindowLayouts(nullptr);
-    //_windowManager.QuitAll();
+    PostQuitMessage(0);
+    co_return;
 }
 
 void AppHost::_revokeWindowCallbacks()
@@ -457,33 +462,6 @@ void AppHost::_revokeWindowCallbacks()
     _window->WindowVisibilityChanged(_windowCallbacks.WindowVisibilityChanged);
     _window->MaximizeChanged(_windowCallbacks.MaximizeChanged);
     _window->AutomaticShutdownRequested(_windowCallbacks.AutomaticShutdownRequested);
-}
-
-// revoke our callbacks, discard our XAML content (TerminalWindow &
-// TerminalPage), and hand back our IslandWindow. This does _not_ close the XAML
-// island for this thread. We should not be re-used after this, and our caller
-// can destruct us like they normally would during a close. The returned
-// IslandWindow will retain ownership of the DesktopWindowXamlSource, for later
-// reuse.
-[[nodiscard]] std::unique_ptr<IslandWindow> AppHost::Refrigerate()
-{
-    // After calling _window->Close() we should avoid creating more WinUI related actions.
-    // I suspect WinUI wouldn't like that very much. As such unregister all event handlers first.
-    _revokers = {};
-    _showHideWindowThrottler.reset();
-    _stopFrameTimer();
-    _revokeWindowCallbacks();
-
-    // DO NOT CLOSE THE WINDOW
-    _window->Refrigerate();
-
-    if (_windowLogic)
-    {
-        _windowLogic.DismissDialog();
-        _windowLogic = nullptr;
-    }
-
-    return std::move(_window);
 }
 
 // Method Description:
@@ -1163,47 +1141,6 @@ void AppHost::_IsQuakeWindowChanged(const winrt::Windows::Foundation::IInspectab
     _window->IsQuakeWindow(_windowLogic.IsQuakeWindow());
 }
 
-// Raised from our Peasant. We handle by propagating the call to our terminal window.
-void AppHost::_QuitRequested(const winrt::Windows::Foundation::IInspectable&, const winrt::Windows::Foundation::IInspectable&)
-{
-    const auto root = _windowLogic.GetRoot();
-    if (!root)
-    {
-        return;
-    }
-
-    const auto dispatcher = root.Dispatcher();
-    if (!dispatcher)
-    {
-        return;
-    }
-
-    // We process the shutdown synchronously here, because otherwise the
-    // AutomaticShutdownRequested() logic wouldn't run synchronously either.
-    til::latch latch{ 1 };
-
-    dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Normal, [&latch, weakThis = weak_from_this()]() {
-        const auto countDownOnExit = wil::scope_exit([&latch] {
-            latch.count_down();
-        });
-
-        const auto self = weakThis.lock();
-        if (!self)
-        {
-            return;
-        }
-
-        if (self->_appLogic && self->_windowLogic && self->_appLogic.ShouldUsePersistedLayout())
-        {
-            self->_windowLogic.PersistState();
-        }
-
-        PostQuitMessage(0);
-    });
-
-    latch.wait();
-}
-
 // Raised from TerminalWindow. We handle by bubbling the request to the window manager.
 void AppHost::_RequestQuitAll(const winrt::Windows::Foundation::IInspectable&,
                               const winrt::Windows::Foundation::IInspectable&)
@@ -1314,21 +1251,9 @@ void AppHost::_WindowMoved()
 void AppHost::_CloseRequested(const winrt::Windows::Foundation::IInspectable& /*sender*/,
                               const winrt::Windows::Foundation::IInspectable& /*args*/)
 {
-    //if (_windowManager.GetNumberOfPeasants() <= 1)
+    if (const auto manager = _windowManager.lock())
     {
-        _quit();
-        return;
-    }
-
-    //_windowManager.SignalClose(_peasant);
-
-    if (Utils::IsWindows11())
-    {
-        PostQuitMessage(0);
-    }
-    else
-    {
-        PostMessageW(_window->GetInteropHandle(), WM_REFRIGERATE, 0, 0);
+        PostMessageW(manager->GetMainWindow(), WindowEmperor::WM_CLOSE_TERMINAL_WINDOW, 0, reinterpret_cast<LPARAM>(this));
     }
 }
 

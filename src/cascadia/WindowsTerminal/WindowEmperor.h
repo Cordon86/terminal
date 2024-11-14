@@ -22,8 +22,16 @@ class AppHost;
 class WindowEmperor : public std::enable_shared_from_this<WindowEmperor>
 {
 public:
+    enum UserMessages : UINT
+    {
+        WM_CLOSE_TERMINAL_WINDOW = WM_USER,
+        WM_IDENTIFY_ALL_WINDOWS,
+        WM_NOTIFY_FROM_NOTIFICATION_AREA,
+    };
+
     WindowEmperor() noexcept;
 
+    HWND GetMainWindow() const noexcept;
     void HandleCommandlineArgs(int nCmdShow);
 
 private:

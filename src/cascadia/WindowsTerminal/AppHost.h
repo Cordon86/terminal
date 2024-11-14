@@ -20,7 +20,7 @@ public:
     void Initialize();
     void Close();
 
-    [[nodiscard]] std::unique_ptr<IslandWindow> Refrigerate();
+    IslandWindow* GetWindow() const noexcept;
 
     bool OnDirectKeyEvent(const uint32_t vkey, const uint8_t scanCode, const bool down);
     void SetTaskbarProgress(const winrt::Windows::Foundation::IInspectable& sender, const winrt::Windows::Foundation::IInspectable& args);
@@ -113,9 +113,6 @@ private:
 
     void _SystemMenuChangeRequested(const winrt::Windows::Foundation::IInspectable& sender,
                                     const winrt::TerminalApp::SystemMenuChangeArgs& args);
-
-    void _QuitRequested(const winrt::Windows::Foundation::IInspectable& sender,
-                        const winrt::Windows::Foundation::IInspectable& args);
 
     void _RequestQuitAll(const winrt::Windows::Foundation::IInspectable& sender,
                          const winrt::Windows::Foundation::IInspectable& args);

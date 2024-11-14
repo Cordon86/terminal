@@ -160,22 +160,10 @@ namespace winrt::Microsoft::Terminal::Control::implementation
 
     RECT TsfDataProvider::GetViewport()
     {
-        const auto scaleFactor = static_cast<float>(DisplayInformation::GetForCurrentView().RawPixelsPerViewPixel());
-        const auto globalOrigin = CoreWindow::GetForCurrentThread().Bounds();
-        const auto localOrigin = _termControl->TransformToVisual(nullptr).TransformPoint({});
-        const auto size = _termControl->ActualSize();
-
-        const auto left = globalOrigin.X + localOrigin.X;
-        const auto top = globalOrigin.Y + localOrigin.Y;
-        const auto right = left + size.x;
-        const auto bottom = top + size.y;
-
-        return {
-            lroundf(left * scaleFactor),
-            lroundf(top * scaleFactor),
-            lroundf(right * scaleFactor),
-            lroundf(bottom * scaleFactor),
-        };
+        const auto hwnd = reinterpret_cast<HWND>(_termControl->OwningHwnd());
+        RECT clientRect;
+        GetWindowRect(hwnd, &clientRect);
+        return clientRect;
     }
 
     RECT TsfDataProvider::GetCursorPosition()
@@ -186,16 +174,19 @@ namespace winrt::Microsoft::Terminal::Control::implementation
             return {};
         }
 
+        const auto hwnd = reinterpret_cast<HWND>(_termControl->OwningHwnd());
+        RECT clientRect;
+        GetWindowRect(hwnd, &clientRect);
+
         const auto scaleFactor = static_cast<float>(DisplayInformation::GetForCurrentView().RawPixelsPerViewPixel());
-        const auto globalOrigin = CoreWindow::GetForCurrentThread().Bounds();
         const auto localOrigin = _termControl->TransformToVisual(nullptr).TransformPoint({});
         const auto padding = _termControl->GetPadding();
         const auto cursorPosition = core->CursorPosition();
         const auto fontSize = core->FontSize();
 
         // fontSize is not in DIPs, so we need to first multiply by scaleFactor and then do the rest.
-        const auto left = (globalOrigin.X + localOrigin.X + static_cast<float>(padding.Left)) * scaleFactor + cursorPosition.X * fontSize.Width;
-        const auto top = (globalOrigin.Y + localOrigin.Y + static_cast<float>(padding.Top)) * scaleFactor + cursorPosition.Y * fontSize.Height;
+        const auto left = clientRect.left + (localOrigin.X + static_cast<float>(padding.Left)) * scaleFactor + cursorPosition.X * fontSize.Width;
+        const auto top = clientRect.top + (localOrigin.Y + static_cast<float>(padding.Top)) * scaleFactor + cursorPosition.Y * fontSize.Height;
         const auto right = left + fontSize.Width;
         const auto bottom = top + fontSize.Height;
 
@@ -1899,8 +1890,6 @@ namespace winrt::Microsoft::Terminal::Control::implementation
                                        const winrt::Microsoft::Terminal::Core::ControlKeyStates modifiers,
                                        const bool keyDown)
     {
-        const auto window = CoreWindow::GetForCurrentThread();
-
         // If the terminal translated the key, mark the event as handled.
         // This will prevent the system from trying to get the character out
         // of it and sending us a CharacterReceived event.
@@ -4035,14 +4024,12 @@ namespace winrt::Microsoft::Terminal::Control::implementation
     void TermControl::_contextMenuHandler(IInspectable /*sender*/,
                                           Control::ContextMenuRequestedEventArgs args)
     {
-        // Position the menu where the pointer is. This was the best way I found how.
-        const auto absolutePointerPos = CoreWindow::GetForCurrentThread().PointerPosition();
-        const auto absoluteWindowOrigin = CoreWindow::GetForCurrentThread().Bounds();
-        // Get the offset (margin + tabs, etc..) of the control within the window
-        const auto controlOrigin = TransformToVisual(nullptr).TransformPoint({});
+        const auto inverseScale = 1.0f / static_cast<float>(XamlRoot().RasterizationScale());
+        const auto padding = GetPadding();
+        const auto pos = args.Position();
         _showContextMenuAt({
-            absolutePointerPos.X - absoluteWindowOrigin.X - controlOrigin.X,
-            absolutePointerPos.Y - absoluteWindowOrigin.Y - controlOrigin.Y,
+            pos.X * inverseScale + static_cast<float>(padding.Left),
+            pos.Y * inverseScale + static_cast<float>(padding.Top),
         });
     }
 

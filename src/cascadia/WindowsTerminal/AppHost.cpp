@@ -30,43 +30,34 @@ using namespace std::chrono_literals;
 // This magic flag is "documented" at https://msdn.microsoft.com/en-us/library/windows/desktop/ms646301(v=vs.85).aspx
 // "If the high-order bit is 1, the key is down; otherwise, it is up."
 static constexpr short KeyPressed{ gsl::narrow_cast<short>(0x8000) };
+static constexpr auto FrameUpdateInterval = std::chrono::milliseconds(16);
 
-constexpr const auto FrameUpdateInterval = std::chrono::milliseconds(16);
+static winrt::com_ptr<IVirtualDesktopManager> _desktopManager;
 
-AppHost::AppHost(const winrt::TerminalApp::AppLogic& logic, winrt::TerminalApp::WindowRequestedArgs args, std::weak_ptr<WindowEmperor> manager, std::unique_ptr<IslandWindow> window) noexcept :
+AppHost::AppHost(const winrt::TerminalApp::AppLogic& logic, winrt::TerminalApp::WindowRequestedArgs args, std::weak_ptr<WindowEmperor> manager) noexcept :
     _appLogic{ logic },
     _windowLogic{ nullptr }, // don't make one, we're going to take a ref on app's
-    _windowManager{ manager },
-    _desktopManager{ winrt::try_create_instance<IVirtualDesktopManager>(__uuidof(VirtualDesktopManager)) }
+    _windowManager{ std::move(manager) }
 {
+    if (!_desktopManager)
+    {
+        _desktopManager = winrt::try_create_instance<IVirtualDesktopManager>(__uuidof(VirtualDesktopManager));
+    }
+
     _started = std::chrono::high_resolution_clock::now();
 
     _HandleCommandlineArgs(args);
 
-    // Don't attempt to session restore if we're just making a window for tear-out
-    if (args.Content().empty())
-    {
-        _HandleSessionRestore(args);
-    }
-
     // _HandleCommandlineArgs will create a _windowLogic
     _useNonClientArea = _windowLogic.GetShowTabsInTitlebar();
 
-    const bool isWarmStart = window != nullptr;
-    if (isWarmStart)
+    if (_useNonClientArea)
     {
-        _window = std::move(window);
+        _window = std::make_unique<NonClientIslandWindow>(_windowLogic.GetRequestedTheme());
     }
     else
     {
-        if (_useNonClientArea)
-        {
-            _window = std::make_unique<NonClientIslandWindow>(_windowLogic.GetRequestedTheme());
-        }
-        else
-        {
-            _window = std::make_unique<IslandWindow>();
-        }
+        _window = std::make_unique<IslandWindow>();
     }
 
     // Update our own internal state tracking if we're in quake mode or not.
@@ -147,103 +138,42 @@ void AppHost::_HandleCommandlineArgs(const winrt::TerminalApp::WindowRequestedAr
     // We don't have XAML yet, but we do have other stuff.
     _windowLogic = _appLogic.CreateNewWindow();
 
+    if (const auto content = windowArgs.Content(); !content.empty())
     {
-        const bool startedForContent = !windowArgs.Content().empty();
-        if (startedForContent)
+        _windowLogic.SetStartupContent(content, windowArgs.InitialBounds());
+    }
+    else
+    {
+        const auto result = _windowLogic.SetStartupCommandline(windowArgs.Commandline(), windowArgs.CurrentDirectory(), windowArgs.CurrentEnvironment());
+        const auto message = _windowLogic.ParseCommandlineMessage();
+        if (!message.empty())
         {
-            _windowLogic.SetStartupContent(windowArgs.Content(), windowArgs.InitialBounds());
-        }
-        else
-        {
-            const auto result = _windowLogic.SetStartupCommandline(windowArgs.Commandline(), windowArgs.CurrentDirectory(), windowArgs.CurrentEnvironment());
-            const auto message = _windowLogic.ParseCommandlineMessage();
-            if (!message.empty())
-            {
-                AppHost::s_DisplayMessageBox({ message, result });
+            AppHost::s_DisplayMessageBox({ message, result });
 
-                if (_windowLogic.ShouldExitEarly())
-                {
-                    ExitThread(result);
-                }
+            if (_windowLogic.ShouldExitEarly())
+            {
+                _CloseRequested(nullptr, nullptr);
             }
         }
-
-        _launchShowWindowCommand = windowArgs.ShowWindowCommand();
-
-        // This is a fix for GH#12190 and hopefully GH#12169.
-        //
-        // If the commandline we were provided is going to result in us only
-        // opening elevated terminal instances, then we need to not even create
-        // the window at all here. In that case, we're going through this
-        // special escape hatch to dispatch all the calls to elevate-shim, and
-        // then we're going to exit immediately.
-        if (_windowLogic.ShouldImmediatelyHandoffToElevated())
-        {
-            _windowLogic.HandoffToElevated();
-            return;
-        }
-
-        _windowLogic.WindowName(windowArgs.WindowName());
-        _windowLogic.WindowId(windowArgs.Id());
     }
-}
 
-void AppHost::_HandleSessionRestore(const winrt::TerminalApp::WindowRequestedArgs& args)
-{
-    // This is logic that almost seems like it belongs on the WindowEmperor.
-    // It probably does. However, it needs to muck with our own window so
-    // much, that there was no reasonable way of moving this. Moving it also
-    // seemed to reorder bits of init so much that everything broke. So
-    // we'll leave it here.
-    // TODO: What the fuck is even going on here
-    /*const auto numPeasants = _windowManager.GetNumberOfPeasants();
-    if (numPeasants != 1 || !_appLogic.ShouldUsePersistedLayout())
+    _launchShowWindowCommand = windowArgs.ShowWindowCommand();
+
+    // This is a fix for GH#12190 and hopefully GH#12169.
+    //
+    // If the commandline we were provided is going to result in us only
+    // opening elevated terminal instances, then we need to not even create
+    // the window at all here. In that case, we're going through this
+    // special escape hatch to dispatch all the calls to elevate-shim, and
+    // then we're going to exit immediately.
+    if (_windowLogic.ShouldImmediatelyHandoffToElevated())
     {
+        _windowLogic.HandoffToElevated();
         return;
-    }*/
-
-    const auto state = ApplicationState::SharedInstance();
-    const auto layouts = state.PersistedWindowLayouts();
-
-    if (layouts && layouts.Size() > 0)
-    {
-        uint32_t startIdx = 0;
-        // We want to create a window for every saved layout.
-        // If we are the only window, and no commandline arguments were provided
-        // then we should just use the current window to load the first layout.
-        // Otherwise create this window normally with its commandline, and create
-        // a new window using the first saved layout information.
-        // The 2nd+ layout will always get a new window.
-        if (!_windowLogic.HasCommandlineArguments() &&
-            !_appLogic.HasSettingsStartupActions())
-        {
-            _windowLogic.SetPersistedLayoutIdx(startIdx);
-            startIdx += 1;
-        }
-
-        // Create new windows for each of the other saved layouts.
-        for (const auto size = layouts.Size(); startIdx < size; startIdx += 1)
-        {
-            auto newWindowArgs = fmt::format(FMT_COMPILE(L"{} -w new -s {}"), args.Commandline()[0], startIdx);
-
-            STARTUPINFO si;
-            memset(&si, 0, sizeof(si));
-            si.cb = sizeof(si);
-            wil::unique_process_information pi;
-
-            LOG_IF_WIN32_BOOL_FALSE(CreateProcessW(nullptr,
-                                                   newWindowArgs.data(),
-                                                   nullptr, // lpProcessAttributes
-                                                   nullptr, // lpThreadAttributes
-                                                   false, // bInheritHandles
-                                                   DETACHED_PROCESS | CREATE_UNICODE_ENVIRONMENT, // doCreationFlags
-                                                   nullptr, // lpEnvironment
-                                                   nullptr, // lpStartingDirectory
-                                                   &si, // lpStartupInfo
-                                                   &pi // lpProcessInformation
-                                                   ));
-        }
     }
+
+    _windowLogic.WindowName(windowArgs.WindowName());
+    _windowLogic.WindowId(windowArgs.Id());
 }
 
 // Method Description:
@@ -890,7 +820,7 @@ void AppHost::_WindowActivated(bool activated)
 {
     _windowLogic.WindowActivated(activated);
 
-    if (activated && _isWindowInitialized)
+    if (activated && _isWindowInitialized != WindowInitializedState::NotInitialized)
     {
         _peasantNotifyActivateWindow();
     }
@@ -917,6 +847,16 @@ safe_void_coroutine AppHost::_peasantNotifyActivateWindow()
     {
         co_return;
     }
+
+    // TODO: projects/5 - in the future, we'll want to actually get the
+    // desktop GUID in IslandWindow, and bubble that up here, then down to
+    // the Peasant. For now, we're just leaving space for it.
+    /*peasant.ActivateWindow({
+        peasant.GetID(),
+        reinterpret_cast<uint64_t>(hwnd),
+        currentDesktopGuid,
+        winrt::clock().now(),
+    });*/
 }
 
 void AppHost::_HandleSummon(const winrt::Windows::Foundation::IInspectable& /*sender*/,

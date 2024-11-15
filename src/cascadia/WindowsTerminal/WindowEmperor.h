@@ -32,6 +32,7 @@ public:
     WindowEmperor() noexcept;
 
     HWND GetMainWindow() const noexcept;
+    void ForcePersistence(bool force) noexcept;
     void HandleCommandlineArgs(int nCmdShow);
 
 private:

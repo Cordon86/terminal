@@ -12,9 +12,7 @@ class WindowEmperor;
 class AppHost : public std::enable_shared_from_this<AppHost>
 {
 public:
-    static constexpr DWORD WM_REFRIGERATE = WM_APP + 0;
-
-    AppHost(const winrt::TerminalApp::AppLogic& logic, winrt::TerminalApp::WindowRequestedArgs args, std::weak_ptr<WindowEmperor> manager, std::unique_ptr<IslandWindow> window = nullptr) noexcept;
+    AppHost(const winrt::TerminalApp::AppLogic& logic, winrt::TerminalApp::WindowRequestedArgs args, std::weak_ptr<WindowEmperor> manager) noexcept;
 
     void AppTitleChanged(const winrt::Windows::Foundation::IInspectable& sender, winrt::hstring newTitle);
     void Initialize();
@@ -34,9 +32,8 @@ private:
     winrt::TerminalApp::AppLogic _appLogic;
     winrt::TerminalApp::TerminalWindow _windowLogic;
     std::weak_ptr<WindowEmperor> _windowManager;
-    winrt::com_ptr<IVirtualDesktopManager> _desktopManager{ nullptr };
 
-    enum WindowInitializedState : uint32_t
+    enum class WindowInitializedState : uint32_t
     {
         NotInitialized = 0,
         Initializing = 1,
@@ -57,7 +54,6 @@ private:
     void _revokeWindowCallbacks();
 
     void _HandleCommandlineArgs(const winrt::TerminalApp::WindowRequestedArgs& args);
-    void _HandleSessionRestore(const winrt::TerminalApp::WindowRequestedArgs& args);
 
     winrt::Microsoft::Terminal::Settings::Model::LaunchPosition _GetWindowLaunchPosition();
 

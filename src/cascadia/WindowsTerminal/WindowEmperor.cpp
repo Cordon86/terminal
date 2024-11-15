@@ -199,6 +199,11 @@ HWND WindowEmperor::GetMainWindow() const noexcept
     return _window.get();
 }
 
+void WindowEmperor::ForcePersistence(bool force) noexcept
+{
+    _requiresPersistenceCleanupOnExit = force;
+}
+
 void WindowEmperor::HandleCommandlineArgs(int nCmdShow)
 {
     _app.Logic().ReloadSettings();
@@ -447,60 +452,6 @@ LRESULT WindowEmperor::_messageHandler(HWND window, UINT const message, WPARAM c
     {
         switch (message)
         {
-        case WM_SETTINGCHANGE:
-        {
-            // Currently, we only support checking when the OS theme changes. In
-            // that case, wParam is 0. Re-evaluate when we decide to reload env vars
-            // (GH#1125)
-            if (wParam == 0 && lParam != 0)
-            {
-                // ImmersiveColorSet seems to be the notification that the OS theme
-                // changed. If that happens, let the app know, so it can hot-reload
-                // themes, color schemes that might depend on the OS theme
-                if (wcscmp(reinterpret_cast<const wchar_t*>(lParam), L"ImmersiveColorSet") == 0)
-                {
-                    try
-                    {
-                        // GH#15732: Don't update the settings, unless the theme
-                        // _actually_ changed. ImmersiveColorSet gets sent more often
-                        // than just on a theme change. It notably gets sent when the PC
-                        // is locked, or the UAC prompt opens.
-                        const auto isCurrentlyDark = Theme::IsSystemInDarkTheme();
-                        if (isCurrentlyDark != _currentSystemThemeIsDark)
-                        {
-                            _currentSystemThemeIsDark = isCurrentlyDark;
-                            _app.Logic().ReloadSettings();
-                        }
-                    }
-                    CATCH_LOG();
-                }
-            }
-            return 0;
-        }
-        case WM_COPYDATA:
-        {
-            const auto cds = reinterpret_cast<COPYDATASTRUCT*>(lParam);
-            if (cds->dwData == TERMINAL_HANDOFF_MAGIC)
-            {
-                try
-                {
-                    const auto handoff = deserializeHandoffPayload(static_cast<const uint8_t*>(cds->lpData), static_cast<const uint8_t*>(cds->lpData) + cds->cbData);
-                    const winrt::hstring args{ handoff.args };
-                    const winrt::hstring env{ handoff.env };
-                    const winrt::hstring cwd{ handoff.cwd };
-                    const auto argv = buildArgsFromCommandline(args.c_str());
-                    const winrt::TerminalApp::CommandlineArgs eventArgs{ argv, cwd, gsl::narrow_cast<uint32_t>(handoff.show), env };
-                    _createNewWindowThread(winrt::TerminalApp::WindowRequestedArgs{ eventArgs });
-                }
-                CATCH_LOG();
-            }
-            return 0;
-        }
-        case WM_HOTKEY:
-        {
-            _hotkeyPressed(static_cast<long>(wParam));
-            return 0;
-        }
         case WM_CLOSE_TERMINAL_WINDOW:
         {
             const auto host = reinterpret_cast<AppHost*>(lParam);
@@ -520,6 +471,14 @@ LRESULT WindowEmperor::_messageHandler(HWND window, UINT const message, WPARAM c
             if (_windows.empty())
             {
                 PostQuitMessage(0);
+            }
+            return 0;
+        }
+        case WM_IDENTIFY_ALL_WINDOWS:
+        {
+            for (const auto& host : _windows)
+            {
+                host->Logic().IdentifyWindow();
             }
             return 0;
         }
@@ -646,6 +605,60 @@ LRESULT WindowEmperor::_messageHandler(HWND window, UINT const message, WPARAM c
             default:
                 break;
             }
+            return 0;
+        }
+        case WM_SETTINGCHANGE:
+        {
+            // Currently, we only support checking when the OS theme changes. In
+            // that case, wParam is 0. Re-evaluate when we decide to reload env vars
+            // (GH#1125)
+            if (wParam == 0 && lParam != 0)
+            {
+                // ImmersiveColorSet seems to be the notification that the OS theme
+                // changed. If that happens, let the app know, so it can hot-reload
+                // themes, color schemes that might depend on the OS theme
+                if (wcscmp(reinterpret_cast<const wchar_t*>(lParam), L"ImmersiveColorSet") == 0)
+                {
+                    try
+                    {
+                        // GH#15732: Don't update the settings, unless the theme
+                        // _actually_ changed. ImmersiveColorSet gets sent more often
+                        // than just on a theme change. It notably gets sent when the PC
+                        // is locked, or the UAC prompt opens.
+                        const auto isCurrentlyDark = Theme::IsSystemInDarkTheme();
+                        if (isCurrentlyDark != _currentSystemThemeIsDark)
+                        {
+                            _currentSystemThemeIsDark = isCurrentlyDark;
+                            _app.Logic().ReloadSettings();
+                        }
+                    }
+                    CATCH_LOG();
+                }
+            }
+            return 0;
+        }
+        case WM_COPYDATA:
+        {
+            const auto cds = reinterpret_cast<COPYDATASTRUCT*>(lParam);
+            if (cds->dwData == TERMINAL_HANDOFF_MAGIC)
+            {
+                try
+                {
+                    const auto handoff = deserializeHandoffPayload(static_cast<const uint8_t*>(cds->lpData), static_cast<const uint8_t*>(cds->lpData) + cds->cbData);
+                    const winrt::hstring args{ handoff.args };
+                    const winrt::hstring env{ handoff.env };
+                    const winrt::hstring cwd{ handoff.cwd };
+                    const auto argv = buildArgsFromCommandline(args.c_str());
+                    const winrt::TerminalApp::CommandlineArgs eventArgs{ argv, cwd, gsl::narrow_cast<uint32_t>(handoff.show), env };
+                    _createNewWindowThread(winrt::TerminalApp::WindowRequestedArgs{ eventArgs });
+                }
+                CATCH_LOG();
+            }
+            return 0;
+        }
+        case WM_HOTKEY:
+        {
+            _hotkeyPressed(static_cast<long>(wParam));
             return 0;
         }
         default:

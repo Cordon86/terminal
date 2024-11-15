@@ -763,40 +763,22 @@ namespace winrt::Microsoft::Terminal::Control::implementation
     // - Given Settings having been updated, applies the settings to the current terminal.
     // Return Value:
     // - <none>
-    safe_void_coroutine TermControl::UpdateControlSettings(IControlSettings settings,
-                                                           IControlAppearance unfocusedAppearance)
+    void TermControl::UpdateControlSettings(IControlSettings settings, IControlAppearance unfocusedAppearance)
     {
-        auto weakThis{ get_weak() };
+        _core.UpdateSettings(settings, unfocusedAppearance);
 
-        // Dispatch a call to the UI thread to apply the new settings to the
-        // terminal.
-        co_await wil::resume_foreground(Dispatcher());
+        _UpdateSettingsFromUIThread();
 
-        if (auto strongThis{ weakThis.get() })
-        {
-            _core.UpdateSettings(settings, unfocusedAppearance);
-
-            _UpdateSettingsFromUIThread();
-
-            _UpdateAppearanceFromUIThread(_focused ? _core.FocusedAppearance() : _core.UnfocusedAppearance());
-        }
+        _UpdateAppearanceFromUIThread(_focused ? _core.FocusedAppearance() : _core.UnfocusedAppearance());
     }
 
     // Method Description:
     // - Dispatches a call to the UI thread and updates the appearance
     // Arguments:
     // - newAppearance: the new appearance to set
-    safe_void_coroutine TermControl::UpdateAppearance(IControlAppearance newAppearance)
+    void TermControl::UpdateAppearance(IControlAppearance newAppearance)
     {
-        auto weakThis{ get_weak() };
-
-        // Dispatch a call to the UI thread
-        co_await wil::resume_foreground(Dispatcher());
-
-        if (auto strongThis{ weakThis.get() })
-        {
-            _UpdateAppearanceFromUIThread(newAppearance);
-        }
+        _UpdateAppearanceFromUIThread(newAppearance);
     }
 
     // Method Description:
@@ -2175,10 +2157,8 @@ namespace winrt::Microsoft::Terminal::Control::implementation
     // - <unused>
     // Return Value:
     // - <none>
-    safe_void_coroutine TermControl::_coreTransparencyChanged(IInspectable /*sender*/,
-                                                              Control::TransparencyChangedEventArgs /*args*/)
+    void TermControl::_coreTransparencyChanged(IInspectable /*sender*/, Control::TransparencyChangedEventArgs /*args*/)
     {
-        co_await wil::resume_foreground(Dispatcher());
         try
         {
             _changeBackgroundOpacity();

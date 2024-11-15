@@ -53,7 +53,7 @@ public:
     void FlashTaskbar();
     void SetTaskbarProgress(const size_t state, const size_t progress);
 
-    safe_void_coroutine SummonWindow(winrt::TerminalApp::SummonWindowBehavior args);
+    void SummonWindow(winrt::TerminalApp::SummonWindowBehavior args);
 
     bool IsQuakeWindow() const noexcept;
     void IsQuakeWindow(bool isQuakeWindow) noexcept;

@@ -2345,17 +2345,13 @@ namespace winrt::TerminalApp::implementation
     //   reattach instead of create new content, so this method simply needs to
     //   parse the JSON and pump it into our action handler. Almost the same as
     //   doing something like `wt -w 0 nt`.
-    safe_void_coroutine TerminalPage::AttachContent(IVector<Settings::Model::ActionAndArgs> args,
-                                                    uint32_t tabIndex)
+    void TerminalPage::AttachContent(IVector<Settings::Model::ActionAndArgs> args, uint32_t tabIndex)
     {
         if (args == nullptr ||
             args.Size() == 0)
         {
-            co_return;
+            return;
         }
-
-        // Switch to the UI thread before selecting a tab or dispatching actions.
-        co_await wil::resume_foreground(Dispatcher(), CoreDispatcherPriority::High);
 
         const auto& firstAction = args.GetAt(0);
         const bool firstIsSplitPane{ firstAction.Action() == ShortcutAction::SplitPane };
@@ -4290,57 +4286,49 @@ namespace winrt::TerminalApp::implementation
     // - <none>
     // Return Value:
     // - <none>
-    safe_void_coroutine TerminalPage::IdentifyWindow()
+    void TerminalPage::IdentifyWindow()
     {
-        auto weakThis{ get_weak() };
-        co_await wil::resume_foreground(Dispatcher());
-        if (auto page{ weakThis.get() })
+        // If we haven't ever loaded the TeachingTip, then do so now and
+        // create the toast for it.
+        if (_windowIdToast == nullptr)
         {
-            // If we haven't ever loaded the TeachingTip, then do so now and
-            // create the toast for it.
-            if (page->_windowIdToast == nullptr)
+            if (auto tip{ FindName(L"WindowIdToast").try_as<MUX::Controls::TeachingTip>() })
             {
-                if (auto tip{ page->FindName(L"WindowIdToast").try_as<MUX::Controls::TeachingTip>() })
-                {
-                    page->_windowIdToast = std::make_shared<Toast>(tip);
-                    // Make sure to use the weak ref when setting up this
-                    // callback.
-                    tip.Closed({ page->get_weak(), &TerminalPage::_FocusActiveControl });
-                }
+                _windowIdToast = std::make_shared<Toast>(tip);
+                // IsLightDismissEnabled == true is bugged and poorly interacts with multi-windowing.
+                // It causes the tip to be immediately dismissed when another tip is opened in another window.
+                tip.IsLightDismissEnabled(false);
+                // Make sure to use the weak ref when setting up this callback.
+                tip.Closed({ get_weak(), &TerminalPage::_FocusActiveControl });
             }
-            _UpdateTeachingTipTheme(WindowIdToast().try_as<winrt::Windows::UI::Xaml::FrameworkElement>());
+        }
+        _UpdateTeachingTipTheme(WindowIdToast().try_as<winrt::Windows::UI::Xaml::FrameworkElement>());
 
-            if (page->_windowIdToast != nullptr)
-            {
-                page->_windowIdToast->Open();
-            }
+        if (_windowIdToast != nullptr)
+        {
+            _windowIdToast->Open();
         }
     }
 
-    safe_void_coroutine TerminalPage::ShowTerminalWorkingDirectory()
+    void TerminalPage::ShowTerminalWorkingDirectory()
     {
-        auto weakThis{ get_weak() };
-        co_await wil::resume_foreground(Dispatcher());
-        if (auto page{ weakThis.get() })
+        // If we haven't ever loaded the TeachingTip, then do so now and
+        // create the toast for it.
+        if (_windowCwdToast == nullptr)
         {
-            // If we haven't ever loaded the TeachingTip, then do so now and
-            // create the toast for it.
-            if (page->_windowCwdToast == nullptr)
+            if (auto tip{ FindName(L"WindowCwdToast").try_as<MUX::Controls::TeachingTip>() })
             {
-                if (auto tip{ page->FindName(L"WindowCwdToast").try_as<MUX::Controls::TeachingTip>() })
-                {
-                    page->_windowCwdToast = std::make_shared<Toast>(tip);
-                    // Make sure to use the weak ref when setting up this
-                    // callback.
-                    tip.Closed({ page->get_weak(), &TerminalPage::_FocusActiveControl });
-                }
+                _windowCwdToast = std::make_shared<Toast>(tip);
+                // Make sure to use the weak ref when setting up this
+                // callback.
+                tip.Closed({ get_weak(), &TerminalPage::_FocusActiveControl });
             }
-            _UpdateTeachingTipTheme(WindowCwdToast().try_as<winrt::Windows::UI::Xaml::FrameworkElement>());
+        }
+        _UpdateTeachingTipTheme(WindowCwdToast().try_as<winrt::Windows::UI::Xaml::FrameworkElement>());
 
-            if (page->_windowCwdToast != nullptr)
-            {
-                page->_windowCwdToast->Open();
-            }
+        if (_windowCwdToast != nullptr)
+        {
+            _windowCwdToast->Open();
         }
     }
 
@@ -5045,25 +5033,18 @@ namespace winrt::TerminalApp::implementation
 
     // Handler for our WindowProperties's PropertyChanged event. We'll use this
     // to pop the "Identify Window" toast when the user renames our window.
-    safe_void_coroutine TerminalPage::_windowPropertyChanged(const IInspectable& /*sender*/,
-                                                             const WUX::Data::PropertyChangedEventArgs& args)
+    void TerminalPage::_windowPropertyChanged(const IInspectable& /*sender*/, const WUX::Data::PropertyChangedEventArgs& args)
     {
         if (args.PropertyName() != L"WindowName")
         {
-            co_return;
+            return;
         }
-        auto weakThis{ get_weak() };
-        // On the foreground thread, raise property changed notifications, and
-        // display the success toast.
-        co_await wil::resume_foreground(Dispatcher());
-        if (auto page{ weakThis.get() })
+
+        // DON'T display the confirmation if this is the name we were
+        // given on startup!
+        if (_startupState == StartupState::Initialized)
         {
-            // DON'T display the confirmation if this is the name we were
-            // given on startup!
-            if (page->_startupState == StartupState::Initialized)
-            {
-                page->IdentifyWindow();
-            }
+            IdentifyWindow();
         }
     }
 
@@ -5136,8 +5117,8 @@ namespace winrt::TerminalApp::implementation
     // - Called on the TARGET of a tab drag/drop. We'll unpack the DataPackage
     //   to find who the tab came from. We'll then ask the Monarch to ask the
     //   sender to move that tab to us.
-    safe_void_coroutine TerminalPage::_onTabStripDrop(winrt::Windows::Foundation::IInspectable /*sender*/,
-                                                      winrt::Windows::UI::Xaml::DragEventArgs e)
+    void TerminalPage::_onTabStripDrop(winrt::Windows::Foundation::IInspectable /*sender*/,
+                                       winrt::Windows::UI::Xaml::DragEventArgs e)
     {
         // Get the PID and make sure it is the same as ours.
         if (const auto& pidObj{ e.DataView().Properties().TryLookup(L"pid") })
@@ -5146,20 +5127,20 @@ namespace winrt::TerminalApp::implementation
             if (pid != GetCurrentProcessId())
             {
                 // The PID doesn't match ours. We can't handle this drop.
-                co_return;
+                return;
             }
         }
         else
         {
             // No PID? We can't handle this drop. Bail.
-            co_return;
+            return;
         }
 
         const auto& windowIdObj{ e.DataView().Properties().TryLookup(L"windowId") };
         if (windowIdObj == nullptr)
         {
             // No windowId? Bail.
-            co_return;
+            return;
         }
         const uint64_t src{ winrt::unbox_value<uint64_t>(windowIdObj) };
 
@@ -5167,38 +5148,32 @@ namespace winrt::TerminalApp::implementation
         // index to the request. This is largely taken from the WinUI sample
         // app.
 
-        // We need to be on OUR UI thread to figure out where we dropped
-        auto weakThis{ get_weak() };
-        co_await wil::resume_foreground(Dispatcher());
-        if (const auto& page{ weakThis.get() })
-        {
-            // First we need to get the position in the List to drop to
-            auto index = -1;
+        // First we need to get the position in the List to drop to
+        auto index = -1;
 
-            // Determine which items in the list our pointer is between.
-            for (auto i = 0u; i < _tabView.TabItems().Size(); i++)
+        // Determine which items in the list our pointer is between.
+        for (auto i = 0u; i < _tabView.TabItems().Size(); i++)
+        {
+            if (const auto& item{ _tabView.ContainerFromIndex(i).try_as<winrt::MUX::Controls::TabViewItem>() })
             {
-                if (const auto& item{ _tabView.ContainerFromIndex(i).try_as<winrt::MUX::Controls::TabViewItem>() })
+                const auto posX{ e.GetPosition(item).X }; // The point of the drop, relative to the tab
+                const auto itemWidth{ item.ActualWidth() }; // The right of the tab
+                // If the drag point is on the left half of the tab, then insert here.
+                if (posX < itemWidth / 2)
                 {
-                    const auto posX{ e.GetPosition(item).X }; // The point of the drop, relative to the tab
-                    const auto itemWidth{ item.ActualWidth() }; // The right of the tab
-                    // If the drag point is on the left half of the tab, then insert here.
-                    if (posX < itemWidth / 2)
-                    {
-                        index = i;
-                        break;
-                    }
+                    index = i;
+                    break;
                 }
             }
-
-            // `this` is safe to use
-            const auto request = winrt::make_self<RequestReceiveContentArgs>(src, _WindowProperties.WindowId(), index);
-
-            // This will go up to the monarch, who will then dispatch the request
-            // back down to the source TerminalPage, who will then perform a
-            // RequestMoveContent to move their tab to us.
-            RequestReceiveContent.raise(*this, *request);
         }
+
+        // `this` is safe to use
+        const auto request = winrt::make_self<RequestReceiveContentArgs>(src, _WindowProperties.WindowId(), index);
+
+        // This will go up to the monarch, who will then dispatch the request
+        // back down to the source TerminalPage, who will then perform a
+        // RequestMoveContent to move their tab to us.
+        RequestReceiveContent.raise(*this, *request);
     }
 
     // Method Description:
@@ -5208,33 +5183,23 @@ namespace winrt::TerminalApp::implementation
     //   the destination window.
     // - Fortunately, sending the tab is basically just a MoveTab action, so we
     //   can largely reuse that.
-    safe_void_coroutine TerminalPage::SendContentToOther(winrt::TerminalApp::RequestReceiveContentArgs args)
+    void TerminalPage::SendContentToOther(winrt::TerminalApp::RequestReceiveContentArgs args)
     {
         // validate that we're the source window of the tab in this request
         if (args.SourceWindow() != _WindowProperties.WindowId())
         {
-            co_return;
+            return;
         }
         if (!_stashed.draggedTab)
         {
-            co_return;
+            return;
         }
 
-        // must do the work of adding/removing tabs on the UI thread.
-        auto weakThis{ get_weak() };
-        co_await wil::resume_foreground(Dispatcher(), CoreDispatcherPriority::Normal);
-        if (const auto& page{ weakThis.get() })
-        {
-            // `this` is safe to use in here.
-
-            _sendDraggedTabToWindow(winrt::to_hstring(args.TargetWindow()),
-                                    args.TabIndex(),
-                                    std::nullopt);
-        }
+        _sendDraggedTabToWindow(winrt::to_hstring(args.TargetWindow()), args.TabIndex(), std::nullopt);
     }
 
-    safe_void_coroutine TerminalPage::_onTabDroppedOutside(winrt::IInspectable sender,
-                                                           winrt::MUX::Controls::TabViewTabDroppedOutsideEventArgs e)
+    void TerminalPage::_onTabDroppedOutside(winrt::IInspectable sender,
+                                            winrt::MUX::Controls::TabViewTabDroppedOutsideEventArgs e)
     {
         // Get the current pointer point from the CoreWindow
         const auto& pointerPoint{ CoreWindow::GetForCurrentThread().PointerPosition() };
@@ -5246,29 +5211,21 @@ namespace winrt::TerminalApp::implementation
 
         if (!_stashed.draggedTab)
         {
-            co_return;
+            return;
         }
 
-        // must do the work of adding/removing tabs on the UI thread.
-        auto weakThis{ get_weak() };
-        co_await wil::resume_foreground(Dispatcher(), CoreDispatcherPriority::Normal);
-        if (const auto& page{ weakThis.get() })
-        {
-            // `this` is safe to use in here.
+        // We need to convert the pointer point to a point that we can use
+        // to position the new window. We'll use the drag offset from before
+        // so that the tab in the new window is positioned so that it's
+        // basically still directly under the cursor.
 
-            // We need to convert the pointer point to a point that we can use
-            // to position the new window. We'll use the drag offset from before
-            // so that the tab in the new window is positioned so that it's
-            // basically still directly under the cursor.
-
-            // -1 is the magic number for "new window"
-            // 0 as the tab index, because we don't care. It's making a new window. It'll be the only tab.
-            const winrt::Windows::Foundation::Point adjusted = {
-                pointerPoint.X - _stashed.dragOffset.X,
-                pointerPoint.Y - _stashed.dragOffset.Y,
-            };
-            _sendDraggedTabToWindow(winrt::hstring{ L"-1" }, 0, adjusted);
-        }
+        // -1 is the magic number for "new window"
+        // 0 as the tab index, because we don't care. It's making a new window. It'll be the only tab.
+        const winrt::Windows::Foundation::Point adjusted = {
+            pointerPoint.X - _stashed.dragOffset.X,
+            pointerPoint.Y - _stashed.dragOffset.Y,
+        };
+        _sendDraggedTabToWindow(winrt::hstring{ L"-1" }, 0, adjusted);
     }
 
     void TerminalPage::_sendDraggedTabToWindow(const winrt::hstring& windowId,
